@@ -1173,13 +1173,17 @@ def render_manage_demand():
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 'Generate Schedule'
 
+st.sidebar.markdown('### Overview')
 st.sidebar.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
 
-st.sidebar.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
+st.sidebar.markdown('### Settings')
 
-with st.sidebar.expander("⚙️ Settings", expanded=True):
+with st.sidebar.expander("⚙️ General Settings", expanded=True):
     st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
     st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
+    st.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
+
+with st.sidebar.expander("🔐 Admin Database", expanded=False):
     st.button("🗓️ Manage Shifts", on_click=lambda: st.session_state.update(current_page='Manage Shifts'), use_container_width=True)
     st.button("🔧 Manage Skills", on_click=lambda: st.session_state.update(current_page='Manage Skills'), use_container_width=True)
     st.button("🏆 Grades Hierarchy", on_click=lambda: st.session_state.update(current_page='Grades Hierarchy'), use_container_width=True)
