@@ -506,6 +506,7 @@ def render_manage_shifts():
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
                         save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
                         st.session_state.editing_shift_id = None
+                        st.session_state.shift_success_msg = f"Successfully updated shift: {s['code']}"
                         st.rerun()
                 with f_col2:
                     if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -627,6 +628,11 @@ def render_manage_grades():
                     st.rerun()
 
 def render_manage_leave_types():
+    # --- Success Message Handling ---
+    if 'leave_success_msg' in st.session_state and st.session_state.leave_success_msg:
+        st.success(st.session_state.leave_success_msg)
+        st.session_state.leave_success_msg = None
+
     with st.expander("Add New Leave Type", expanded=False):
         with st.form("add_leave_form", clear_on_submit=True):
             col_code, col_name, col_paid = st.columns([1, 2, 1])
@@ -703,7 +709,7 @@ def render_manage_leave_types():
                 if updated:
                     if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
                         save_data(LEAVES_DATA_FILE, st.session_state.leaves)
-                        st.success("Changes saved.")
+                        st.session_state.leave_success_msg = f"Changes for '{leave['name']}' saved successfully."
                         st.rerun()
             with col_del:
                 if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
@@ -712,6 +718,11 @@ def render_manage_leave_types():
                     st.rerun()
 
 def render_manage_staffs():
+    # --- Success Message Handling ---
+    if 'staff_success_msg' in st.session_state and st.session_state.staff_success_msg:
+        st.success(st.session_state.staff_success_msg)
+        st.session_state.staff_success_msg = None
+
     with st.expander("Add New Nurse", expanded=False):
         col_id, col_name, col_grade, col_btn = st.columns([1, 2, 2, 1])
         with col_id:
@@ -838,6 +849,7 @@ def render_manage_staffs():
             if updated:
                 if st.button("Save Changes", key=f"save_nurse_{i}", use_container_width=True):
                     save_data(NURSE_DATA_FILE, st.session_state.nurses)
+                    st.session_state.staff_success_msg = f"Changes saved for {nurse['name']}."
                     st.rerun()
 
 def render_manage_skills():
@@ -992,7 +1004,7 @@ def render_manage_skills():
                                 skill['description'] = edit_desc
                                 save_data(SKILLS_DATA_FILE, st.session_state.skills)
                                 st.session_state.editing_skill_id = None
-                                st.success("Skill updated!")
+                                st.session_state.skill_success_msg = f"Successfully updated skill: {edit_code}"
                                 st.rerun()
                     with f_col2:
                         if st.form_submit_button("❌ Cancel", use_container_width=True):
