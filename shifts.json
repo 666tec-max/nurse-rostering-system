@@ -1,0 +1,35 @@
+[
+    {
+        "code": "M",
+        "name": "Morning",
+        "type": "Day",
+        "start": "07:00",
+        "end": "15:00",
+        "duration": 480,
+        "color": "#2ee2d2",
+        "required_skills": [],
+        "id": "M_0"
+    },
+    {
+        "code": "E",
+        "name": "Evening",
+        "start": "15:00",
+        "end": "23:00",
+        "duration": 480,
+        "type": "Day",
+        "color": "#e07896",
+        "required_skills": [],
+        "id": "E_2"
+    },
+    {
+        "code": "N",
+        "name": "Night",
+        "type": "Night",
+        "duration": 570,
+        "color": "#E5CCFF",
+        "start": "22:00",
+        "end": "07:30",
+        "required_skills": [],
+        "id": "N_3"
+    }
+]

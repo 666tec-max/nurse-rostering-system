@@ -1,0 +1,83 @@
+[
+    {
+        "name": "Nurse 1",
+        "role": "RN",
+        "leave_days": []
+    },
+    {
+        "name": "Nurse 2",
+        "role": "RN",
+        "leave_days": [
+            10
+        ]
+    },
+    {
+        "name": "Nurse 3",
+        "role": "RN",
+        "leave_days": []
+    },
+    {
+        "name": "Nurse 4",
+        "role": "RN",
+        "leave_days": [
+            5,
+            7,
+            11
+        ]
+    },
+    {
+        "name": "Nurse 5",
+        "role": "RN",
+        "leave_days": []
+    },
+    {
+        "name": "Nurse 6",
+        "role": "RN",
+        "leave_days": []
+    },
+    {
+        "name": "Nurse 7",
+        "role": "RN",
+        "leave_days": []
+    },
+    {
+        "name": "Nurse 8",
+        "role": "RN",
+        "leave_days": []
+    },
+    {
+        "name": "Nurse 9",
+        "role": "RN",
+        "leave_days": [
+            9
+        ]
+    },
+    {
+        "name": "Nurse 10",
+        "role": "RN",
+        "leave_days": [
+            8
+        ]
+    },
+    {
+        "name": "New",
+        "role": "RN",
+        "leave_days": [
+            5,
+            7
+        ]
+    },
+    {
+        "name": "Newly added",
+        "role": "RN",
+        "leave_days": [
+            8,
+            13
+        ]
+    },
+    {
+        "name": "Yuki",
+        "role": "RN",
+        "leave_days": []
+    }
+]
