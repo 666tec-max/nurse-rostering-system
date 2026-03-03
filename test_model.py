@@ -102,7 +102,50 @@ def test_grade_and_skill():
     else:
         print("FAIL: No solution found.")
 
+def test_multiple_shifts():
+    print("\nTesting Multiple Shifts...")
+    nurses = [
+        {'name': 'SuperNurse', 'grade': 'RN', 'skills': []},
+        {'name': 'NormalNurse', 'grade': 'RN', 'skills': []}
+    ]
+    shifts_config = [
+        {'code': 'M', 'type': 'Day', 'start': '07:00', 'duration': 480}, # 7am-3pm
+        {'code': 'E', 'type': 'Day', 'start': '15:00', 'duration': 480}, # 3pm-11pm
+    ]
+    
+    # Requirement: Day 0 needs 2 M shifts and 1 E shift. But only 2 nurses exist!
+    # If limited to 1 shift per day, this is infeasible since 3 shifts > 2 nurses.
+    # If multiple shifts are allowed, one nurse can do both M and E.
+    shift_reqs = {
+        (0, 'M'): {'Total': 2},
+        (0, 'E'): {'Total': 1}
+    }
+    
+    print("  -> Testing with allow_multiple_shifts=False (Should fail)")
+    model_fail = NurseRosteringModel(2, 1, nurses, shift_reqs, shifts_config, allow_multiple_shifts=False)
+    model_fail.build_model()
+    model_fail.add_constraints()
+    status_fail = model_fail.solve_model()
+    from ortools.sat.python import cp_model
+    if status_fail in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        print("    FAIL: Found a solution when it should have been impossible.")
+    else:
+        print("    SUCCESS: Correctly identified as infeasible.")
+
+    print("  -> Testing with allow_multiple_shifts=True (Should succeed)")
+    model_success = NurseRosteringModel(2, 1, nurses, shift_reqs, shifts_config, allow_multiple_shifts=True)
+    model_success.build_model()
+    model_success.add_constraints()
+    status_success = model_success.solve_model()
+    if status_success in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        schedule = model_success.extract_solution(status_success)
+        print("    Schedule:", schedule)
+        print("    SUCCESS: Nurse successfully took multiple shifts.")
+    else:
+        print("    FAIL: Multiple shifts test failed, returned infeasible.")
+
 if __name__ == "__main__":
     test_model()
     test_grade_substitution()
     test_grade_and_skill()
+    test_multiple_shifts()

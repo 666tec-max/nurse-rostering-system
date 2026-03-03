@@ -1279,18 +1279,48 @@ elif st.session_state.current_page == 'Constraints & Rules':
     st.write("Overview of the scheduling constraints and optimization objectives used by the solver.")
 
     st.subheader("Hard Constraints (Enforced)")
+    
+    # Checkbox to toggle multiple shifts
+    if 'allow_multiple_shifts' not in st.session_state:
+        st.session_state.allow_multiple_shifts = False
+
+    mult_shifts_col1, mult_shifts_col2 = st.columns([1, 11])
+    with mult_shifts_col1:
+        new_val = st.checkbox("", value=st.session_state.allow_multiple_shifts, key="mult_shifts_toggle")
+        if new_val != st.session_state.allow_multiple_shifts:
+            st.session_state.allow_multiple_shifts = new_val
+            st.rerun()
+    with mult_shifts_col2:
+        st.markdown("**Allow Multiple Shifts Per Day** (Must not overlap in time)")
+
     st.markdown('''
     These rules are **always** enforced — the solver will never violate them.
-
-    - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
-    - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
-    - **Night Shift Recovery:**
-        - Max 4 consecutive night shifts.
-        - 1 Night → 1 Day Off
-        - 2-3 Nights → 2 Days Off
-        - 4 Nights → 3 Days Off
-    - **Leave Compliance:** Nurses on leave are not assigned.
     ''')
+    
+    if st.session_state.allow_multiple_shifts:
+        st.markdown('''
+        - **Max Shifts/Day:** Nurses can work multiple shifts per day, as long as their times do not overlap.
+        - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
+        - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
+        - **Night Shift Recovery:**
+            - Max 4 consecutive night shifts.
+            - 1 Night → 1 Day Off
+            - 2-3 Nights → 2 Days Off
+            - 4 Nights → 3 Days Off
+        - **Leave Compliance:** Nurses on leave are not assigned.
+        ''')
+    else:
+        st.markdown('''
+        - **Max 1 Shift/Day:** No nurse works more than 1 shift per day.
+        - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
+        - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
+        - **Night Shift Recovery:**
+            - Max 4 consecutive night shifts.
+            - 1 Night → 1 Day Off
+            - 2-3 Nights → 2 Days Off
+            - 4 Nights → 3 Days Off
+        - **Leave Compliance:** Nurses on leave are not assigned.
+        ''')
 
     st.subheader("Soft Objectives (Optimized)")
     st.markdown('''
@@ -1327,7 +1357,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                 nurses_list=st.session_state.nurses,
                 shift_requirements=shift_requirements,
                 shifts_config=st.session_state.shifts,
-                grade_hierarchy=st.session_state.grades
+                grade_hierarchy=st.session_state.grades,
+                allow_multiple_shifts=st.session_state.get('allow_multiple_shifts', False)
             )
             
             try:
