@@ -626,6 +626,91 @@ def render_manage_grades():
                     save_data(GRADES_DATA_FILE, st.session_state.grades)
                     st.rerun()
 
+def render_manage_leave_types():
+    with st.expander("Add New Leave Type", expanded=False):
+        with st.form("add_leave_form", clear_on_submit=True):
+            col_code, col_name, col_paid = st.columns([1, 2, 1])
+            with col_code:
+                new_code = st.text_input("Code (e.g., ML)", max_chars=5)
+            with col_name:
+                new_name = st.text_input("Leave Name")
+            with col_paid:
+                st.write("") # Spacer
+                st.write("") # Spacer
+                new_is_paid = st.checkbox("Paid Leave", value=True)
+                
+            new_desc = st.text_input("Description")
+            new_color = st.color_picker("Color", "#E0E0E0")
+            
+            if st.form_submit_button("Add Leave Type", use_container_width=True):
+                if new_code and new_name:
+                    if any(l['code'] == new_code for l in st.session_state.leaves):
+                        st.error("Leave code already exists!")
+                    else:
+                        st.session_state.leaves.append({
+                            "code": new_code,
+                            "name": new_name,
+                            "description": new_desc,
+                            "color": new_color,
+                            "is_paid": new_is_paid
+                        })
+                        save_data(LEAVES_DATA_FILE, st.session_state.leaves)
+                        st.success(f"Added leave type: {new_code}")
+                        st.rerun()
+                else:
+                    st.warning("Code and Name are required.")
+
+    st.markdown("---")
+    st.subheader("Current Leave Types")
+    
+    for i, leave in enumerate(st.session_state.leaves):
+        with st.expander(f"[{leave['code']}] {leave['name']}", expanded=False):
+            col_code, col_name, col_paid = st.columns([1, 2, 1])
+            updated = False
+            
+            with col_code:
+                edit_code = st.text_input("Code", value=leave.get('code', ''), max_chars=5, key=f"leave_code_{i}")
+                if edit_code != leave.get('code'):
+                    leave['code'] = edit_code
+                    updated = True
+                    
+            with col_name:
+                edit_name = st.text_input("Name", value=leave.get('name', ''), key=f"leave_name_{i}")
+                if edit_name != leave.get('name'):
+                    leave['name'] = edit_name
+                    updated = True
+                    
+            with col_paid:
+                st.write("") # Spacer
+                st.write("") # Spacer
+                edit_paid = st.checkbox("Paid Leave", value=leave.get('is_paid', True), key=f"leave_paid_{i}")
+                if edit_paid != leave.get('is_paid'):
+                    leave['is_paid'] = edit_paid
+                    updated = True
+                    
+            edit_desc = st.text_input("Description", value=leave.get('description', ''), key=f"leave_desc_{i}")
+            if edit_desc != leave.get('description'):
+                leave['description'] = edit_desc
+                updated = True
+                
+            edit_color = st.color_picker("Color", value=leave.get('color', '#E0E0E0'), key=f"leave_color_{i}")
+            if edit_color != leave.get('color'):
+                leave['color'] = edit_color
+                updated = True
+                
+            col_save, col_del = st.columns(2)
+            with col_save:
+                if updated:
+                    if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
+                        save_data(LEAVES_DATA_FILE, st.session_state.leaves)
+                        st.success("Changes saved.")
+                        st.rerun()
+            with col_del:
+                if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
+                    st.session_state.leaves.pop(i)
+                    save_data(LEAVES_DATA_FILE, st.session_state.leaves)
+                    st.rerun()
+
 def render_manage_staffs():
     with st.expander("Add New Nurse", expanded=False):
         col_id, col_name, col_grade, col_btn = st.columns([1, 2, 2, 1])
