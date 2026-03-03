@@ -1078,23 +1078,7 @@ if 'current_page' not in st.session_state:
 
 st.sidebar.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
 
-# Add Info about constraints
-with st.sidebar.expander("ℹ️  Constraints & Rules Info"):
-    st.markdown('''
-    **Hard Constraints (Enforced):**
-    - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
-    - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
-    - **Night Shift Recovery:**
-        - Max 4 consecutive night shifts.
-        - 1 Night → 1 Day Off
-        - 2-3 Nights → 2 Days Off
-        - 4 Nights → 3 Days Off
-    - **Leave Compliance:** Nurses on leave are not assigned.
-    
-    **Soft Objectives (Optimized):**
-    - **Maximize Utilization:** Assign extra nurses to shifts beyond minimums if capacity allows.
-    - **Fairness:** Balance total shifts among all nurses.
-    ''')
+st.sidebar.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
 
 with st.sidebar.expander("⚙️ Settings", expanded=True):
     st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
@@ -1188,6 +1172,32 @@ elif st.session_state.current_page == 'Manage Staffs':
 elif st.session_state.current_page == 'Minimum Demand':
     st.header("Minimum Demand")
     render_manage_demand()
+
+elif st.session_state.current_page == 'Constraints & Rules':
+    st.header("Constraints & Rules")
+    st.write("Overview of the scheduling constraints and optimization objectives used by the solver.")
+
+    st.subheader("Hard Constraints (Enforced)")
+    st.markdown('''
+    These rules are **always** enforced — the solver will never violate them.
+
+    - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
+    - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
+    - **Night Shift Recovery:**
+        - Max 4 consecutive night shifts.
+        - 1 Night → 1 Day Off
+        - 2-3 Nights → 2 Days Off
+        - 4 Nights → 3 Days Off
+    - **Leave Compliance:** Nurses on leave are not assigned.
+    ''')
+
+    st.subheader("Soft Objectives (Optimized)")
+    st.markdown('''
+    These goals are **optimized** — the solver tries its best to achieve them.
+
+    - **Maximize Utilization:** Assign extra nurses to shifts beyond minimums if capacity allows.
+    - **Fairness:** Balance total shifts among all nurses.
+    ''')
 
 elif st.session_state.current_page == 'Generate Schedule':
     st.header("Schedule Generation")
