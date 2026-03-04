@@ -206,14 +206,14 @@ DEFAULT_SHIFTS = [
 
 # Default Skills
 DEFAULT_SKILLS = [
-    {"code": "BLS", "name": "Basic Life Support", "description": "CPR, AED use, and basic emergency response."},
-    {"code": "ACLS", "name": "Advanced Cardiac Life Support", "description": "Advanced treatment for cardiac emergencies."},
-    {"code": "IVT", "name": "Intravenous Therapy", "description": "Inserting and managing IV lines."},
-    {"code": "WDC", "name": "Wound Care", "description": "Cleaning, dressing, and monitoring wounds."},
-    {"code": "MED", "name": "General Medicine", "description": "General medical ward care"},
-    {"code": "SUR", "name": "Surgical", "description": "Surgical unit experience"},
-    {"code": "CAR", "name": "Cardiology", "description": "Cardiology department"},
-    {"code": "NEU", "name": "Neurology", "description": "Neurology department"}
+    {"code": "ACLS", "name": "Advanced Cardiac Life Support", "description": "Advanced treatment for cardiac emergencies.", "color": "#FFCCCB"},
+    {"code": "BLS", "name": "Basic Life Support", "description": "CPR, AED use, and basic emergency response.", "color": "#B2F2BB"},
+    {"code": "CAR", "name": "Cardiology", "description": "Cardiology department", "color": "#A5D8FF"},
+    {"code": "IVT", "name": "Intravenous Therapy", "description": "Inserting and managing IV lines.", "color": "#FFD8A8"},
+    {"code": "MED", "name": "General Medicine", "description": "General medical ward care", "color": "#D0EBFF"},
+    {"code": "NEU", "name": "Neurology", "description": "Neurology department", "color": "#D3f9d8"},
+    {"code": "SUR", "name": "Surgical", "description": "Surgical unit experience", "color": "#FFF9DB"},
+    {"code": "WDC", "name": "Wound Care", "description": "Cleaning, dressing, and monitoring wounds.", "color": "#F3D9FA"}
 ]
 
 st.title("Nurse Rostering System")
@@ -248,6 +248,10 @@ if 'shifts' not in st.session_state:
 
 if 'skills' not in st.session_state:
     st.session_state.skills = load_data(SKILLS_DATA_FILE, DEFAULT_SKILLS)
+    for sk in st.session_state.skills:
+        if 'color' not in sk:
+            sk['color'] = "#F0F4F8"
+    st.session_state.skills.sort(key=lambda x: x['code'].upper())
 
 if 'nurses' not in st.session_state:
     st.session_state.nurses = load_data(NURSE_DATA_FILE, [
@@ -923,6 +927,7 @@ def render_manage_skills():
                 new_skill_name = st.text_input("Name", help="e.g., ICU Care")
             
             new_skill_desc = st.text_area("Description", help="Brief description")
+            new_skill_color = st.color_picker("Color", "#F0F4F8")
 
             if st.form_submit_button("Add Skill", use_container_width=True):
                 if new_skill_code and new_skill_name:
@@ -933,9 +938,11 @@ def render_manage_skills():
                             "code": new_skill_code,
                             "name": new_skill_name,
                             "description": new_skill_desc if new_skill_desc else "",
+                            "color": new_skill_color,
                             "id": f"skill_{new_skill_code}_{datetime.now().timestamp()}"
                         }
                         st.session_state.skills.append(new_skill)
+                        st.session_state.skills.sort(key=lambda x: x['code'].upper())
                         save_data(SKILLS_DATA_FILE, st.session_state.skills)
                         notify(f"Successfully added skill: {new_skill_code}")
                         st.rerun()
@@ -965,7 +972,7 @@ def render_manage_skills():
                     st.markdown(f"""
                     <div class="skill-card" style="margin-bottom: 0; border: none; box-shadow: none; padding: 0;">
                         <div class="skill-info">
-                            <div class="skill-code">
+                            <div class="skill-code" style="background-color: {skill.get('color', '#F0F4F8')}66; border: 2px solid {skill.get('color', '#F0F4F8')}; color: #333">
                                 {skill['code']}
                             </div>
                             <div class="skill-details">
@@ -998,6 +1005,7 @@ def render_manage_skills():
                     edit_code = e_col1.text_input("Code", value=skill['code'], max_chars=5)
                     edit_name = e_col2.text_input("Name", value=skill['name'])
                     edit_desc = st.text_area("Description", value=skill.get('description', ''))
+                    edit_color = st.color_picker("Color", value=skill.get('color', '#F0F4F8'))
                     
                     f_col1, f_col2 = st.columns(2)
                     with f_col1:
@@ -1008,6 +1016,8 @@ def render_manage_skills():
                                 skill['code'] = edit_code
                                 skill['name'] = edit_name
                                 skill['description'] = edit_desc
+                                skill['color'] = edit_color
+                                st.session_state.skills.sort(key=lambda x: x['code'].upper())
                                 save_data(SKILLS_DATA_FILE, st.session_state.skills)
                                 st.session_state.editing_skill_id = None
                                 notify(f"Successfully updated skill: {edit_code}")
