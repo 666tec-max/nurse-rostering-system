@@ -1,4 +1,5 @@
-import streamlit as st
+import streamlit as st 
+
 import pandas as pd
 import json
 import os
@@ -166,13 +167,24 @@ SKILLS_DATA_FILE = "skills.json"
 DEMAND_DATA_FILE = "demand.json"
 GRADES_DATA_FILE = "grades.json"
 LEAVES_DATA_FILE = "leaves.json"
+if 'pending_notification' not in st.session_state:
+    st.session_state.pending_notification = None
+
+def notify(message):
+    st.session_state.pending_notification = message
+
+def show_notifications():
+    if st.session_state.pending_notification:
+        st.success(st.session_state.pending_notification, icon="✅")
+        st.session_state.pending_notification = None
 
 def load_data(file_path, default_data):
     """Load data from JSON file or return default."""
     if os.path.exists(file_path):
         try:
             with open(file_path, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if data is not None else default_data
         except Exception as e:
             st.error(f"Error loading {file_path}: {e}")
     return default_data
@@ -205,6 +217,7 @@ DEFAULT_SKILLS = [
 ]
 
 st.title("Nurse Rostering System")
+show_notifications()
 
 # Calculate planning horizon from user-selected date range
 today = date.today()
@@ -284,11 +297,6 @@ if 'demand' not in st.session_state:
 # ---------------------------------------------------------------------
 
 def render_manage_shifts():
-    # --- Success Message Handling ---
-    if 'shift_success_msg' in st.session_state and st.session_state.shift_success_msg:
-        st.success(st.session_state.shift_success_msg)
-        st.session_state.shift_success_msg = None # Clear after showing
-
     # --- Custom Styling for Shift Cards ---
     st.markdown("""
     <style>
@@ -396,9 +404,7 @@ def render_manage_shifts():
                         # Automatic Sort by Start Time
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
                         save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
-                        
-                        # Set success message for next run
-                        st.session_state.shift_success_msg = f"Successfully added shift: {new_shift_code}"
+                        notify(f"Successfully added shift: {new_shift_code}")
                         st.rerun()
                 else:
                     st.warning("Code and Name required.")
@@ -444,8 +450,10 @@ def render_manage_shifts():
             with card_cols[2]:
                 st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                 if st.button("🗑️", key=f"del_btn_{stable_key}", help="Delete Shift", use_container_width=True):
+                    deleted_name = st.session_state.shifts[i]['name']
                     st.session_state.shifts.pop(i)
                     save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
+                    notify(f"Shift '{deleted_name}' deleted successfully.")
                     st.rerun()
             
             # Sub-card styling for the whole container
@@ -506,7 +514,7 @@ def render_manage_shifts():
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
                         save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
                         st.session_state.editing_shift_id = None
-                        st.session_state.shift_success_msg = f"Successfully updated shift: {s['code']}"
+                        notify(f"Successfully updated shift: {s['code']}")
                         st.rerun()
                 with f_col2:
                     if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -573,6 +581,7 @@ def render_manage_grades():
         if st.button("➕ Add Layer to Bottom", use_container_width=True):
             st.session_state.grades.append([])
             save_data(GRADES_DATA_FILE, st.session_state.grades)
+            notify("New layer added to bottom.")
             st.rerun()
     with col_rem:
         if len(st.session_state.grades) > 1:
@@ -582,6 +591,7 @@ def render_manage_grades():
                 if not st.session_state.grades[-1] or st.button("Confirm Delete Non-Empty Layer"):
                     st.session_state.grades.pop()
                     save_data(GRADES_DATA_FILE, st.session_state.grades)
+                    notify("Bottom layer removed.")
                     st.rerun()
 
     st.subheader("Edit Layers")
@@ -600,6 +610,7 @@ def render_manage_grades():
                     if new_g_code and new_g_name:
                         st.session_state.grades[i].append({"code": new_g_code, "name": new_g_name})
                         save_data(GRADES_DATA_FILE, st.session_state.grades)
+                        notify(f"Grade '{new_g_code}' added to Level {i+1}.")
                         st.rerun()
             
             # Current Grades in this layer
@@ -610,8 +621,10 @@ def render_manage_grades():
                     c1.code(grade['code'])
                     c2.write(grade['name'])
                     if c3.button("🗑️", key=f"del_g_{i}_{j}"):
+                        deleted_grade = st.session_state.grades[i][j]['code']
                         st.session_state.grades[i].pop(j)
                         save_data(GRADES_DATA_FILE, st.session_state.grades)
+                        notify(f"Grade '{deleted_grade}' deleted.")
                         st.rerun()
 
             # Move layer up/down
@@ -620,19 +633,16 @@ def render_manage_grades():
                 if m1.button(f"⬆️ Move Level {i+1} Up", key=f"up_layer_{i}"):
                     st.session_state.grades[i-1], st.session_state.grades[i] = st.session_state.grades[i], st.session_state.grades[i-1]
                     save_data(GRADES_DATA_FILE, st.session_state.grades)
+                    notify(f"Level moved up.")
                     st.rerun()
             if i < len(st.session_state.grades) - 1:
                 if m2.button(f"⬇️ Move Level {i+1} Down", key=f"down_layer_{i}"):
                     st.session_state.grades[i], st.session_state.grades[i+1] = st.session_state.grades[i+1], st.session_state.grades[i]
                     save_data(GRADES_DATA_FILE, st.session_state.grades)
+                    notify(f"Level moved down.")
                     st.rerun()
 
 def render_manage_leave_types():
-    # --- Success Message Handling ---
-    if 'leave_success_msg' in st.session_state and st.session_state.leave_success_msg:
-        st.success(st.session_state.leave_success_msg)
-        st.session_state.leave_success_msg = None
-
     with st.expander("Add New Leave Type", expanded=False):
         with st.form("add_leave_form", clear_on_submit=True):
             col_code, col_name, col_paid = st.columns([1, 2, 1])
@@ -661,7 +671,7 @@ def render_manage_leave_types():
                             "is_paid": new_is_paid
                         })
                         save_data(LEAVES_DATA_FILE, st.session_state.leaves)
-                        st.success(f"Added leave type: {new_code}")
+                        notify(f"Added leave type: {new_code}")
                         st.rerun()
                 else:
                     st.warning("Code and Name are required.")
@@ -709,20 +719,17 @@ def render_manage_leave_types():
                 if updated:
                     if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
                         save_data(LEAVES_DATA_FILE, st.session_state.leaves)
-                        st.session_state.leave_success_msg = f"Changes for '{leave['name']}' saved successfully."
+                        notify(f"Changes for '{leave['name']}' saved successfully.")
                         st.rerun()
             with col_del:
                 if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
+                    deleted_leave = st.session_state.leaves[i]['name']
                     st.session_state.leaves.pop(i)
                     save_data(LEAVES_DATA_FILE, st.session_state.leaves)
+                    notify(f"Leave type '{deleted_leave}' deleted.")
                     st.rerun()
 
 def render_manage_staffs():
-    # --- Success Message Handling ---
-    if 'staff_success_msg' in st.session_state and st.session_state.staff_success_msg:
-        st.success(st.session_state.staff_success_msg)
-        st.session_state.staff_success_msg = None
-
     with st.expander("Add New Nurse", expanded=False):
         col_id, col_name, col_grade, col_btn = st.columns([1, 2, 2, 1])
         with col_id:
@@ -746,7 +753,7 @@ def render_manage_staffs():
                     }
                     st.session_state.nurses.append(new_nurse)
                     save_data(NURSE_DATA_FILE, st.session_state.nurses)
-                    st.success(f"Added {new_nurse_name}")
+                    notify(f"Added nurse: {new_nurse_name}")
                     st.rerun()
                 else:
                     st.warning("Please enter ID and name.")
@@ -842,22 +849,19 @@ def render_manage_staffs():
                     updated = True
 
             if st.button("Delete Nurse", key=f"delete_{i}", type="primary", use_container_width=True):
+                deleted_nurse = st.session_state.nurses[i]['name']
                 st.session_state.nurses.pop(i)
                 save_data(NURSE_DATA_FILE, st.session_state.nurses)
+                notify(f"Nurse '{deleted_nurse}' deleted.")
                 st.rerun()
             
             if updated:
                 if st.button("Save Changes", key=f"save_nurse_{i}", use_container_width=True):
                     save_data(NURSE_DATA_FILE, st.session_state.nurses)
-                    st.session_state.staff_success_msg = f"Changes saved for {nurse['name']}."
+                    notify(f"Changes saved for {nurse['name']}.")
                     st.rerun()
 
 def render_manage_skills():
-    # --- Success Message Handling ---
-    if 'skill_success_msg' in st.session_state and st.session_state.skill_success_msg:
-        st.success(st.session_state.skill_success_msg)
-        st.session_state.skill_success_msg = None 
-
     # --- Custom Styling for Skill Cards ---
     st.markdown("""
     <style>
@@ -933,7 +937,7 @@ def render_manage_skills():
                         }
                         st.session_state.skills.append(new_skill)
                         save_data(SKILLS_DATA_FILE, st.session_state.skills)
-                        st.session_state.skill_success_msg = f"Successfully added skill: {new_skill_code}"
+                        notify(f"Successfully added skill: {new_skill_code}")
                         st.rerun()
                 else:
                     st.warning("Code and Name are required.")
@@ -980,8 +984,10 @@ def render_manage_skills():
                 with card_cols[2]:
                     st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                     if st.button("🗑️", key=f"del_skill_{stable_key}", help="Delete Skill"):
+                        deleted_skill = st.session_state.skills[i]['name']
                         st.session_state.skills.pop(i)
                         save_data(SKILLS_DATA_FILE, st.session_state.skills)
+                        notify(f"Skill '{deleted_skill}' deleted.")
                         st.rerun()
 
             # --- Inline Edit Form ---
@@ -1004,7 +1010,7 @@ def render_manage_skills():
                                 skill['description'] = edit_desc
                                 save_data(SKILLS_DATA_FILE, st.session_state.skills)
                                 st.session_state.editing_skill_id = None
-                                st.session_state.skill_success_msg = f"Successfully updated skill: {edit_code}"
+                                notify(f"Successfully updated skill: {edit_code}")
                                 st.rerun()
                     with f_col2:
                         if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -1078,19 +1084,24 @@ def render_manage_demand():
                     # Update state based on edited DF
                     new_skill_dict = {"Total": new_total}
                     for _, row in edited_skills.iterrows():
-                        if pd.notna(row['Skill']):
-                            # Clamp min count to total
-                            count = min(int(row['Min Count']), new_total)
-                            new_skill_dict[row['Skill']] = count
+                        if pd.notna(row.get('Skill')) and pd.notna(row.get('Min Count')):
+                            try:
+                                # Clamp min count to total
+                                count = min(int(row['Min Count']), new_total)
+                                new_skill_dict[row['Skill']] = count
+                            except (ValueError, TypeError):
+                                continue
                     st.session_state.demand["default"][shift_code] = new_skill_dict
                 else:
                     if st.button(f"Add Skill Requirement...", key=f"add_skill_btn_{shift_code}"):
                         st.session_state.demand["default"][shift_code][st.session_state.skills[0]['code']] = 1
+                        notify("Skill requirement added. Please select the skill and count.")
                         st.rerun()
 
         if st.button("Save Default Demand", type="primary"):
             save_data(DEMAND_DATA_FILE, st.session_state.demand)
-            st.success("Default demand saved!")
+            notify("Default demand saved!")
+            st.rerun()
 
     with tab2:
         st.write("Modify requirements for **specific dates**.")
@@ -1101,7 +1112,11 @@ def render_manage_demand():
         if st.button("Create/Edit Override for this Date", key="btn_create_ov"):
             if date_str not in st.session_state.demand["overrides"]:
                 st.session_state.demand["overrides"][date_str] = json.loads(json.dumps(st.session_state.demand["default"]))
+                notify(f"Override created for {date_str}")
+            else:
+                notify(f"Editing existing override for {date_str}")
             st.info(f"Override enabled for {date_str}")
+            st.rerun()
 
         if date_str in st.session_state.demand["overrides"]:
             st.warning(f"Editing overrides for {date_str}")
@@ -1146,21 +1161,25 @@ def render_manage_demand():
                     # Update override state
                     new_ov_dict = {"Total": ov_total}
                     for _, row in edited_ov_skills.iterrows():
-                        if pd.notna(row['Skill']):
-                            count = min(int(row['Min Count']), ov_total)
-                            new_ov_dict[row['Skill']] = count
+                        if pd.notna(row.get('Skill')) and pd.notna(row.get('Min Count')):
+                            try:
+                                count = min(int(row['Min Count']), ov_total)
+                                new_ov_dict[row['Skill']] = count
+                            except (ValueError, TypeError):
+                                continue
                     st.session_state.demand["overrides"][date_str][shift_code] = new_ov_dict
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Save Override", type="primary"):
                     save_data(DEMAND_DATA_FILE, st.session_state.demand)
-                    st.success(f"Override saved for {date_str}")
+                    notify(f"Override saved for {date_str}")
+                    st.rerun()
             with col2:
                 if st.button("Delete Override", type="secondary"):
                     del st.session_state.demand["overrides"][date_str]
                     save_data(DEMAND_DATA_FILE, st.session_state.demand)
-                    st.success(f"Override deleted for {date_str}")
+                    notify(f"Override deleted for {date_str}")
                     st.rerun()
         else:
             st.info("No override set for this date. Default demand will be used.")
@@ -1214,6 +1233,7 @@ if st.session_state.current_page == 'Theme':
         with col1:
             if st.button(label, key=f"theme_{theme_name}", type=btn_type, use_container_width=True):
                 st.session_state.theme = theme_name
+                notify(f"Theme changed to {theme_name}.")
                 st.rerun()
         with col2:
             st.write(theme_descriptions[theme_name])
@@ -1247,7 +1267,7 @@ elif st.session_state.current_page == 'Date Range':
             # Reset demand table so it rebuilds for the new date range
             if 'shift_reqs_df' in st.session_state:
                 del st.session_state['shift_reqs_df']
-            st.success("Date range updated!")
+            notify(f"Date range applied: {start_date.strftime('%b %d')} → {end_date.strftime('%b %d')} ({num_days} days)")
             st.rerun()
     else:
         st.info("Please select both a **start** and **end** date.")
@@ -1278,49 +1298,21 @@ elif st.session_state.current_page == 'Constraints & Rules':
     st.header("Constraints & Rules")
     st.write("Overview of the scheduling constraints and optimization objectives used by the solver.")
 
-    st.subheader("Hard Constraints (Enforced)")
-    
-    # Checkbox to toggle multiple shifts
-    if 'allow_multiple_shifts' not in st.session_state:
-        st.session_state.allow_multiple_shifts = False
-
-    mult_shifts_col1, mult_shifts_col2 = st.columns([1, 11])
-    with mult_shifts_col1:
-        new_val = st.checkbox("", value=st.session_state.allow_multiple_shifts, key="mult_shifts_toggle")
-        if new_val != st.session_state.allow_multiple_shifts:
-            st.session_state.allow_multiple_shifts = new_val
-            st.rerun()
-    with mult_shifts_col2:
-        st.markdown("**Allow Multiple Shifts Per Day** (Must not overlap in time)")
+    # Removed toggle for multiple shifts per day to maintain system simplicity
 
     st.markdown('''
     These rules are **always** enforced — the solver will never violate them.
+
+    - **Max 1 Shift/Day:** No nurse works more than 1 shift per day.
+    - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
+    - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
+    - **Night Shift Recovery:**
+        - Max 4 consecutive night shifts.
+        - 1 Night → 1 Day Off
+        - 2-3 Nights → 2 Days Off
+        - 4 Nights → 3 Days Off
+    - **Leave Compliance:** Nurses on leave are not assigned.
     ''')
-    
-    if st.session_state.allow_multiple_shifts:
-        st.markdown('''
-        - **Max Shifts/Day:** Nurses can work multiple shifts per day, as long as their times do not overlap.
-        - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
-        - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
-        - **Night Shift Recovery:**
-            - Max 4 consecutive night shifts.
-            - 1 Night → 1 Day Off
-            - 2-3 Nights → 2 Days Off
-            - 4 Nights → 3 Days Off
-        - **Leave Compliance:** Nurses on leave are not assigned.
-        ''')
-    else:
-        st.markdown('''
-        - **Max 1 Shift/Day:** No nurse works more than 1 shift per day.
-        - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
-        - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
-        - **Night Shift Recovery:**
-            - Max 4 consecutive night shifts.
-            - 1 Night → 1 Day Off
-            - 2-3 Nights → 2 Days Off
-            - 4 Nights → 3 Days Off
-        - **Leave Compliance:** Nurses on leave are not assigned.
-        ''')
 
     st.subheader("Soft Objectives (Optimized)")
     st.markdown('''
@@ -1351,15 +1343,20 @@ elif st.session_state.current_page == 'Generate Schedule':
                     req_dict = day_demand.get(s['code'], {"Total": 1})
                     shift_requirements[(d_idx, s['code'])] = req_dict
 
-            model = NurseRosteringModel(
-                num_nurses=len(st.session_state.nurses),
-                num_days=planning_horizon,
-                nurses_list=st.session_state.nurses,
-                shift_requirements=shift_requirements,
-                shifts_config=st.session_state.shifts,
-                grade_hierarchy=st.session_state.grades,
-                allow_multiple_shifts=st.session_state.get('allow_multiple_shifts', False)
-            )
+            try:
+                model = NurseRosteringModel(
+                    num_nurses=len(st.session_state.nurses),
+                    num_days=planning_horizon,
+                    nurses_list=st.session_state.nurses,
+                    shift_requirements=shift_requirements,
+                    shifts_config=st.session_state.shifts,
+                    grade_hierarchy=st.session_state.grades
+                )
+            except TypeError as te:
+                st.error(f"Initialization Error: {te}")
+                import traceback
+                st.code(traceback.format_exc())
+                st.stop()
             
             try:
                 model.build_model()

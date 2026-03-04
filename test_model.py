@@ -121,8 +121,8 @@ def test_multiple_shifts():
         (0, 'E'): {'Total': 1}
     }
     
-    print("  -> Testing with allow_multiple_shifts=False (Should fail)")
-    model_fail = NurseRosteringModel(2, 1, nurses, shift_reqs, shifts_config, allow_multiple_shifts=False)
+    print("  -> Testing with 1 shift per day limit (Should fail)")
+    model_fail = NurseRosteringModel(2, 1, nurses, shift_reqs, shifts_config)
     model_fail.build_model()
     model_fail.add_constraints()
     status_fail = model_fail.solve_model()
@@ -132,17 +132,8 @@ def test_multiple_shifts():
     else:
         print("    SUCCESS: Correctly identified as infeasible.")
 
-    print("  -> Testing with allow_multiple_shifts=True (Should succeed)")
-    model_success = NurseRosteringModel(2, 1, nurses, shift_reqs, shifts_config, allow_multiple_shifts=True)
-    model_success.build_model()
-    model_success.add_constraints()
-    status_success = model_success.solve_model()
-    if status_success in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        schedule = model_success.extract_solution(status_success)
-        print("    Schedule:", schedule)
-        print("    SUCCESS: Nurse successfully took multiple shifts.")
-    else:
-        print("    FAIL: Multiple shifts test failed, returned infeasible.")
+    # Removed the 'True' test case because multiple shifts are no longer supported.
+    print("  -> Note: Multiple shifts per day test removed as it is no longer supported.")
 
 if __name__ == "__main__":
     test_model()

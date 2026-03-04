@@ -1,7 +1,7 @@
 from ortools.sat.python import cp_model
 
 class NurseRosteringModel:
-    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, allow_multiple_shifts=False, grade_hierarchy=None):
+    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None):
         """
         Initialize the Nurse Rostering Model.
         
@@ -19,7 +19,7 @@ class NurseRosteringModel:
         self.num_days = num_days
         self.nurses = nurses_list
         self.shift_requirements = shift_requirements
-        self.allow_multiple_shifts = allow_multiple_shifts
+        self.shift_requirements = shift_requirements
         self.grade_hierarchy = grade_hierarchy
         
         # Parse shifts configuration
@@ -42,34 +42,6 @@ class NurseRosteringModel:
         self.solver = None
         self.x = {}  # Decision variables: x[(nurse_idx, day, shift)]
 
-    def _get_overlapping_shift_pairs(self):
-        """Find all pairs of shifts that overlap in time."""
-        from datetime import datetime, timedelta
-        
-        overlapping_pairs = []
-        
-        # Helper to convert "HH:MM" to minutes from midnight
-        def get_mins(time_str):
-            t = datetime.strptime(time_str, "%H:%M")
-            return t.hour * 60 + t.minute
-
-        for i, s1 in enumerate(self.shifts_info):
-            s1_start = get_mins(s1.get('start', '07:00'))
-            s1_end = s1_start + s1.get('duration', 480)
-            
-            for j in range(i + 1, len(self.shifts_info)):
-                s2 = self.shifts_info[j]
-                s2_start = get_mins(s2.get('start', '07:00'))
-                s2_end = s2_start + s2.get('duration', 480)
-                
-                # Check for overlap.
-                # Shift 1 overlaps with Shift 2 if Shift 1 starts before Shift 2 ends
-                # AND Shift 1 ends after Shift 2 starts.
-                # (We use > and < to allow shifts to end/start exactly at the same minute seamlessly)
-                if s1_start < s2_end and s1_end > s2_start:
-                    overlapping_pairs.append((s1['code'], s2['code']))
-                    
-        return overlapping_pairs
 
     def _add_night_recovery_constraints(self):
         """Add night shift recovery constraints."""
@@ -140,21 +112,11 @@ class NurseRosteringModel:
         if not self.model:
             raise ValueError("Model not built. Call build_model() first.")
 
-        # 1. Shifts per day constraint
-        if self.allow_multiple_shifts:
-            # If allowed, a nurse can take multiple shifts, BUT they cannot overlap in time.
-            overlapping_pairs = self._get_overlapping_shift_pairs()
-            for n in range(self.num_nurses):
-                for d in range(self.num_days):
-                    for s1_code, s2_code in overlapping_pairs:
-                        # Cannot work both overlapping shifts on the same day
-                        self.model.Add(self.x[(n, d, s1_code)] + self.x[(n, d, s2_code)] <= 1)
-        else:
-            # Default: Max 1 shift per nurse per day
-            # sum_{s ∈ {M,E,N}} x[e,d,s] ≤ 1 for all e, d
-            for n in range(self.num_nurses):
-                for d in range(self.num_days):
-                    self.model.Add(sum(self.x[(n, d, s)] for s in self.shifts) <= 1)
+        # 1. Max 1 shift per nurse per day
+        # sum_{s ∈ {M,E,N}} x[e,d,s] ≤ 1 for all e, d
+        for n in range(self.num_nurses):
+            for d in range(self.num_days):
+                self.model.Add(sum(self.x[(n, d, s)] for s in self.shifts) <= 1)
 
         # 2. Leave compliance
         # x[e,L,s] = 0 for all s ∈ {M,E,N} where L is a leave day
@@ -248,16 +210,15 @@ class NurseRosteringModel:
         self.solver = cp_model.CpSolver()
         
         # --- Step 1: Define variables ---
-        max_shifts_per_day = len(self.shifts) if self.allow_multiple_shifts else 1
         nurse_total_shifts = []
         for n in range(self.num_nurses):
-            total_shifts = self.model.NewIntVar(0, self.num_days * max_shifts_per_day, f'total_shifts_n{n}')
+            total_shifts = self.model.NewIntVar(0, self.num_days, f'total_shifts_n{n}')
             self.model.Add(
                 total_shifts == sum(self.x[(n, d, s)] for d in range(self.num_days) for s in self.shifts)
             )
             nurse_total_shifts.append(total_shifts)
         
-        total_assignments = self.model.NewIntVar(0, self.num_nurses * self.num_days * max_shifts_per_day, 'total_assignments')
+        total_assignments = self.model.NewIntVar(0, self.num_nurses * self.num_days, 'total_assignments')
         self.model.Add(total_assignments == sum(nurse_total_shifts))
         
         # --- Step 2: Define deviations for fairness ---
