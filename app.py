@@ -1192,12 +1192,12 @@ def render_manage_demand():
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 'Generate Schedule'
 
-st.sidebar.markdown('### Overview')
+st.sidebar.markdown('### Main Page')
 st.sidebar.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
 
 st.sidebar.markdown('### Settings')
 
-with st.sidebar.expander("⚙️ General Settings", expanded=True):
+with st.sidebar.expander("⚙️ General Settings", expanded=False):
     st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
     st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
     st.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
