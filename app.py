@@ -172,17 +172,21 @@ if 'pending_notification' not in st.session_state:
 if 'last_action_message' not in st.session_state:
     st.session_state.last_action_message = "System Ready"
 
-def notify(message, type="success"):
+def notify(message, detail=None, type="success"):
     """Queues a notification and updates the last action sidebar indicator."""
-    st.session_state.pending_notification = (message, type)
-    st.session_state.last_action_message = message
+    full_msg = f"{message}\n{detail}" if detail else message
+    st.session_state.pending_notification = (message, detail, type)
+    st.session_state.last_action_message = full_msg
 
 def show_notifications():
     """Displays queued notifications as toasts."""
     if st.session_state.pending_notification:
-        message, type = st.session_state.pending_notification
+        message, detail, type = st.session_state.pending_notification
         icon = "✅" if type == "success" else "⚠️" if type == "warning" else "❌" if type == "error" else "ℹ️"
-        st.toast(message, icon=icon)
+        
+        # Combine for toast
+        toast_msg = f"**{message}**\n{detail}" if detail else message
+        st.toast(toast_msg, icon=icon)
         st.session_state.pending_notification = None
 
 def load_data(file_path, default_data):
@@ -390,7 +394,7 @@ def render_manage_shifts():
             if st.form_submit_button("Add Shift", use_container_width=True):
                 if new_shift_code and new_shift_name:
                     if any(s['code'] == new_shift_code for s in st.session_state.shifts):
-                        notify("Shift code already exists!", type="error")
+                        notify("Add Shift Failed", detail="Shift code already exists!", type="error")
                         st.rerun()
                     else:
                         s_time = f"{new_s_h}:{new_s_m}"
@@ -416,10 +420,10 @@ def render_manage_shifts():
                         # Automatic Sort by Start Time
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
                         save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
-                        notify(f"Successfully added shift: {new_shift_code}")
+                        notify("Shift added successfully:", detail=f"{new_shift_code} - {new_shift_name} ({new_shift_type})")
                         st.rerun()
                 else:
-                    notify("Code and Name required.", type="warning")
+                    notify("Add Shift Failed", detail="Code and Name are required.", type="warning")
                     st.rerun()
 
     st.markdown("---")
@@ -466,7 +470,7 @@ def render_manage_shifts():
                     deleted_name = st.session_state.shifts[i]['name']
                     st.session_state.shifts.pop(i)
                     save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
-                    notify(f"Shift '{deleted_name}' deleted successfully.")
+                    notify("Shift deleted successfully:", detail=f"'{deleted_name}' removed")
                     st.rerun()
             
             # Sub-card styling for the whole container
@@ -527,7 +531,7 @@ def render_manage_shifts():
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
                         save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
                         st.session_state.editing_shift_id = None
-                        notify(f"Successfully updated shift: {s['code']}")
+                        notify("Shift updated successfully:", detail=f"{s['code']} - {s['name']}")
                         st.rerun()
                 with f_col2:
                     if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -594,7 +598,7 @@ def render_manage_grades():
         if st.button("➕ Add Layer to Bottom", use_container_width=True):
             st.session_state.grades.append([])
             save_data(GRADES_DATA_FILE, st.session_state.grades)
-            notify("New layer added to bottom.")
+            notify("Layer added successfully:", detail="New empty level added to bottom")
             st.rerun()
     with col_rem:
         if len(st.session_state.grades) > 1:
@@ -604,7 +608,7 @@ def render_manage_grades():
                 if not st.session_state.grades[-1] or st.button("Confirm Delete Non-Empty Layer"):
                     st.session_state.grades.pop()
                     save_data(GRADES_DATA_FILE, st.session_state.grades)
-                    notify("Bottom layer removed.")
+                    notify("Layer removed successfully:", detail="Bottom level deleted")
                     st.rerun()
 
     st.subheader("Edit Layers")
@@ -623,7 +627,7 @@ def render_manage_grades():
                     if new_g_code and new_g_name:
                         st.session_state.grades[i].append({"code": new_g_code, "name": new_g_name})
                         save_data(GRADES_DATA_FILE, st.session_state.grades)
-                        notify(f"Grade '{new_g_code}' added to Level {i+1}.")
+                        notify("Grade added successfully:", detail=f"'{new_g_code}' added to Level {i+1}")
                         st.rerun()
             
             # Current Grades in this layer
@@ -637,7 +641,7 @@ def render_manage_grades():
                         deleted_grade = st.session_state.grades[i][j]['code']
                         st.session_state.grades[i].pop(j)
                         save_data(GRADES_DATA_FILE, st.session_state.grades)
-                        notify(f"Grade '{deleted_grade}' deleted.")
+                        notify("Grade deleted successfully:", detail=f"'{deleted_grade}' removed")
                         st.rerun()
 
             # Move layer up/down
@@ -646,13 +650,13 @@ def render_manage_grades():
                 if m1.button(f"⬆️ Move Level {i+1} Up", key=f"up_layer_{i}"):
                     st.session_state.grades[i-1], st.session_state.grades[i] = st.session_state.grades[i], st.session_state.grades[i-1]
                     save_data(GRADES_DATA_FILE, st.session_state.grades)
-                    notify(f"Level moved up.")
+                    notify("Layer moved successfully:", detail=f"Level {i+1} shifted up")
                     st.rerun()
             if i < len(st.session_state.grades) - 1:
                 if m2.button(f"⬇️ Move Level {i+1} Down", key=f"down_layer_{i}"):
                     st.session_state.grades[i], st.session_state.grades[i+1] = st.session_state.grades[i+1], st.session_state.grades[i]
                     save_data(GRADES_DATA_FILE, st.session_state.grades)
-                    notify(f"Level moved down.")
+                    notify("Layer moved successfully:", detail=f"Level {i+1} shifted down")
                     st.rerun()
 
 def render_manage_leave_types():
@@ -674,7 +678,7 @@ def render_manage_leave_types():
             if st.form_submit_button("Add Leave Type", use_container_width=True):
                 if new_code and new_name:
                     if any(l['code'] == new_code for l in st.session_state.leaves):
-                        notify("Leave code already exists!", type="error")
+                        notify("Add Leave Type Failed", detail="Leave code already exists!", type="error")
                         st.rerun()
                     else:
                         st.session_state.leaves.append({
@@ -685,10 +689,10 @@ def render_manage_leave_types():
                             "is_paid": new_is_paid
                         })
                         save_data(LEAVES_DATA_FILE, st.session_state.leaves)
-                        notify(f"Added leave type: {new_code}")
+                        notify("Leave type added successfully:", detail=f"{new_code} - {new_name}")
                         st.rerun()
                 else:
-                    notify("Code and Name are required.", type="warning")
+                    notify("Action Failed", detail="Code and Name are required.", type="warning")
                     st.rerun()
 
     st.markdown("---")
@@ -734,14 +738,14 @@ def render_manage_leave_types():
                 if updated:
                     if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
                         save_data(LEAVES_DATA_FILE, st.session_state.leaves)
-                        notify(f"Changes for '{leave['name']}' saved successfully.")
+                        notify("Leave type updated successfully:", detail=f"Changes for '{leave['name']}' saved")
                         st.rerun()
             with col_del:
                 if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
                     deleted_leave = st.session_state.leaves[i]['name']
                     st.session_state.leaves.pop(i)
                     save_data(LEAVES_DATA_FILE, st.session_state.leaves)
-                    notify(f"Leave type '{deleted_leave}' deleted.")
+                    notify("Leave type deleted successfully:", detail=f"'{deleted_leave}' removed")
                     st.rerun()
 
 def render_manage_staffs():
@@ -768,10 +772,10 @@ def render_manage_staffs():
                     }
                     st.session_state.nurses.append(new_nurse)
                     save_data(NURSE_DATA_FILE, st.session_state.nurses)
-                    notify(f"Added nurse: {new_nurse_name}")
+                    notify("Nurse added successfully:", detail=f"[{new_nurse_id}] {new_nurse_name} ({new_nurse_grade})")
                     st.rerun()
                 else:
-                    notify("Please enter ID and name.", type="warning")
+                    notify("Add Nurse Failed", detail="Please enter ID and name.", type="warning")
                     st.rerun()
 
     st.markdown("---")
@@ -828,7 +832,7 @@ def render_manage_staffs():
                         nurse['leave_days'] = []
                         updated = True
                 except ValueError:
-                    notify("Invalid leave format.", type="error")
+                    notify("Update Failed", detail="Invalid leave format. Use comma-separated numbers.", type="error")
                     st.rerun()
 
             with col_reqs:
@@ -869,13 +873,13 @@ def render_manage_staffs():
                 deleted_nurse = st.session_state.nurses[i]['name']
                 st.session_state.nurses.pop(i)
                 save_data(NURSE_DATA_FILE, st.session_state.nurses)
-                notify(f"Nurse '{deleted_nurse}' deleted.")
+                notify("Nurse deleted successfully:", detail=f"'{deleted_nurse}' removed")
                 st.rerun()
             
             if updated:
                 if st.button("Save Changes", key=f"save_nurse_{i}", use_container_width=True):
                     save_data(NURSE_DATA_FILE, st.session_state.nurses)
-                    notify(f"Changes saved for {nurse['name']}.")
+                    notify("Nurse updated successfully:", detail=f"Changes saved for {nurse['name']}")
                     st.rerun()
 
 def render_manage_skills():
@@ -945,7 +949,7 @@ def render_manage_skills():
             if st.form_submit_button("Add Skill", use_container_width=True):
                 if new_skill_code and new_skill_name:
                     if any(s['code'] == new_skill_code for s in st.session_state.skills):
-                        notify("Skill code already exists!", type="error")
+                        notify("Add Skill Failed", detail="Skill code already exists!", type="error")
                         st.rerun()
                     else:
                         new_skill = {
@@ -958,10 +962,10 @@ def render_manage_skills():
                         st.session_state.skills.append(new_skill)
                         st.session_state.skills.sort(key=lambda x: x['code'].upper())
                         save_data(SKILLS_DATA_FILE, st.session_state.skills)
-                        notify(f"Successfully added skill: {new_skill_code}")
+                        notify("Skill added successfully:", detail=f"{new_skill_code} - {new_skill_name}")
                         st.rerun()
                 else:
-                    notify("Code and Name are required.", type="warning")
+                    notify("Action Failed", detail="Code and Name are required.", type="warning")
                     st.rerun()
 
     st.markdown("---")
@@ -1009,7 +1013,7 @@ def render_manage_skills():
                         deleted_skill = st.session_state.skills[i]['name']
                         st.session_state.skills.pop(i)
                         save_data(SKILLS_DATA_FILE, st.session_state.skills)
-                        notify(f"Skill '{deleted_skill}' deleted.")
+                        notify("Skill deleted successfully:", detail=f"'{deleted_skill}' removed")
                         st.rerun()
 
             # --- Inline Edit Form ---
@@ -1026,7 +1030,7 @@ def render_manage_skills():
                     with f_col1:
                         if st.form_submit_button("✅ Save Changes", use_container_width=True):
                             if edit_code != skill['code'] and any(s['code'] == edit_code for s in st.session_state.skills):
-                                notify("Skill code already exists!", type="error")
+                                notify("Update Failed", detail="Skill code already exists!", type="error")
                                 st.rerun()
                             else:
                                 skill['code'] = edit_code
@@ -1036,7 +1040,7 @@ def render_manage_skills():
                                 st.session_state.skills.sort(key=lambda x: x['code'].upper())
                                 save_data(SKILLS_DATA_FILE, st.session_state.skills)
                                 st.session_state.editing_skill_id = None
-                                notify(f"Successfully updated skill: {edit_code}")
+                                notify("Skill updated successfully:", detail=f"{edit_code} - {edit_name}")
                                 st.rerun()
                     with f_col2:
                         if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -1121,12 +1125,12 @@ def render_manage_demand():
                 else:
                     if st.button(f"Add Skill Requirement...", key=f"add_skill_btn_{shift_code}"):
                         st.session_state.demand["default"][shift_code][st.session_state.skills[0]['code']] = 1
-                        notify("Skill requirement added. Please select the skill and count.")
+                        notify("Skill requirement added:", detail="Please select the skill and count in the table below")
                         st.rerun()
 
         if st.button("Save Default Demand", type="primary"):
             save_data(DEMAND_DATA_FILE, st.session_state.demand)
-            notify("Default demand saved!")
+            notify("Default demand saved:", detail="Minimum coverage requirements updated successfully")
             st.rerun()
 
     with tab2:
@@ -1138,10 +1142,9 @@ def render_manage_demand():
         if st.button("Create/Edit Override for this Date", key="btn_create_ov"):
             if date_str not in st.session_state.demand["overrides"]:
                 st.session_state.demand["overrides"][date_str] = json.loads(json.dumps(st.session_state.demand["default"]))
-                notify(f"Override created for {date_str}")
+                notify("Override created:", detail=f"Custom requirements set for {date_str}")
             else:
-                notify(f"Editing existing override for {date_str}")
-            # The station-ary info below is fine as it confirms state, but the notify above provides the "pop up" feedback
+                notify("Editing Override:", detail=f"Loading existing requirements for {date_str}")
             st.rerun()
 
         if date_str in st.session_state.demand["overrides"]:
@@ -1200,13 +1203,13 @@ def render_manage_demand():
             with col1:
                 if st.button("Save Override", type="primary"):
                     save_data(DEMAND_DATA_FILE, st.session_state.demand)
-                    notify(f"Override saved for {date_str}")
+                    notify("Override saved:", detail=f"Custom requirements for {date_str} updated")
                     st.rerun()
             with col2:
                 if st.button("Delete Override", type="secondary"):
                     del st.session_state.demand["overrides"][date_str]
                     save_data(DEMAND_DATA_FILE, st.session_state.demand)
-                    notify(f"Override deleted for {date_str}")
+                    notify("Override deleted:", detail=f"Custom requirements for {date_str} removed")
                     st.rerun()
         else:
             st.info("No override set for this date. Default demand will be used.")
@@ -1264,7 +1267,7 @@ if st.session_state.current_page == 'Theme':
         with col1:
             if st.button(label, key=f"theme_{theme_name}", type=btn_type, use_container_width=True):
                 st.session_state.theme = theme_name
-                notify(f"Theme changed to {theme_name}.")
+                notify("Theme changed successfully:", detail=f"Applied {theme_name} theme to the application")
                 st.rerun()
         with col2:
             st.write(theme_descriptions[theme_name])
@@ -1300,7 +1303,7 @@ elif st.session_state.current_page == 'Date Range':
             # Reset demand table so it rebuilds for the new date range
             if 'shift_reqs_df' in st.session_state:
                 del st.session_state['shift_reqs_df']
-            notify(f"Date range applied: {start_date.strftime('%b %d')} → {end_date.strftime('%b %d')} ({num_days} days)")
+            notify("Date range applied:", detail=f"{start_date.strftime('%b %d')} → {end_date.strftime('%b %d')} ({num_days} days)")
             st.rerun()
     else:
         st.info("Please select both a **start** and **end** date.")
@@ -1398,7 +1401,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                 
                 from ortools.sat.python import cp_model
                 if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-                    notify("Optimized schedule found!", type="success")
+                    notify("Schedule generated successfully:", detail="Optimized solution found for all constraints", type="success")
                     st.rerun() # Rerun to show the toast and updated schedule
                     
                     schedule = model.extract_solution(status)
@@ -1436,7 +1439,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                     st.info(f"Lexicographic Optimization Applied: Max utilization first, then fairness.")
                     
                 else:
-                    notify("No feasible solution found. Try adding more nurses or reducing minimum coverage requirements.", type="error")
+                    notify("Schedule generation failed:", detail="No feasible solution found. Try adding more nurses or reducing requirements.", type="error")
                     st.rerun()
                     
             except Exception as e:
