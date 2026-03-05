@@ -169,13 +169,20 @@ GRADES_DATA_FILE = "grades.json"
 LEAVES_DATA_FILE = "leaves.json"
 if 'pending_notification' not in st.session_state:
     st.session_state.pending_notification = None
+if 'last_action_message' not in st.session_state:
+    st.session_state.last_action_message = "System Ready"
 
-def notify(message):
-    st.session_state.pending_notification = message
+def notify(message, type="success"):
+    """Queues a notification and updates the last action sidebar indicator."""
+    st.session_state.pending_notification = (message, type)
+    st.session_state.last_action_message = message
 
 def show_notifications():
+    """Displays queued notifications as toasts."""
     if st.session_state.pending_notification:
-        st.success(st.session_state.pending_notification, icon="✅")
+        message, type = st.session_state.pending_notification
+        icon = "✅" if type == "success" else "⚠️" if type == "warning" else "❌" if type == "error" else "ℹ️"
+        st.toast(message, icon=icon)
         st.session_state.pending_notification = None
 
 def load_data(file_path, default_data):
@@ -383,7 +390,8 @@ def render_manage_shifts():
             if st.form_submit_button("Add Shift", use_container_width=True):
                 if new_shift_code and new_shift_name:
                     if any(s['code'] == new_shift_code for s in st.session_state.shifts):
-                        st.error("Shift code already exists!")
+                        notify("Shift code already exists!", type="error")
+                        st.rerun()
                     else:
                         s_time = f"{new_s_h}:{new_s_m}"
                         e_time = f"{new_e_h}:{new_e_m}"
@@ -411,7 +419,8 @@ def render_manage_shifts():
                         notify(f"Successfully added shift: {new_shift_code}")
                         st.rerun()
                 else:
-                    st.warning("Code and Name required.")
+                    notify("Code and Name required.", type="warning")
+                    st.rerun()
 
     st.markdown("---")
     st.subheader("Available Shifts")
@@ -665,7 +674,8 @@ def render_manage_leave_types():
             if st.form_submit_button("Add Leave Type", use_container_width=True):
                 if new_code and new_name:
                     if any(l['code'] == new_code for l in st.session_state.leaves):
-                        st.error("Leave code already exists!")
+                        notify("Leave code already exists!", type="error")
+                        st.rerun()
                     else:
                         st.session_state.leaves.append({
                             "code": new_code,
@@ -678,7 +688,8 @@ def render_manage_leave_types():
                         notify(f"Added leave type: {new_code}")
                         st.rerun()
                 else:
-                    st.warning("Code and Name are required.")
+                    notify("Code and Name are required.", type="warning")
+                    st.rerun()
 
     st.markdown("---")
     st.subheader("Current Leave Types")
@@ -760,7 +771,8 @@ def render_manage_staffs():
                     notify(f"Added nurse: {new_nurse_name}")
                     st.rerun()
                 else:
-                    st.warning("Please enter ID and name.")
+                    notify("Please enter ID and name.", type="warning")
+                    st.rerun()
 
     st.markdown("---")
     st.subheader("Current Nurses")
@@ -816,7 +828,8 @@ def render_manage_staffs():
                         nurse['leave_days'] = []
                         updated = True
                 except ValueError:
-                    st.error("Invalid leave format.")
+                    notify("Invalid leave format.", type="error")
+                    st.rerun()
 
             with col_reqs:
                 current_requests = nurse.get('must_have_shifts', [])
@@ -932,7 +945,8 @@ def render_manage_skills():
             if st.form_submit_button("Add Skill", use_container_width=True):
                 if new_skill_code and new_skill_name:
                     if any(s['code'] == new_skill_code for s in st.session_state.skills):
-                        st.error("Skill code already exists!")
+                        notify("Skill code already exists!", type="error")
+                        st.rerun()
                     else:
                         new_skill = {
                             "code": new_skill_code,
@@ -947,7 +961,8 @@ def render_manage_skills():
                         notify(f"Successfully added skill: {new_skill_code}")
                         st.rerun()
                 else:
-                    st.warning("Code and Name are required.")
+                    notify("Code and Name are required.", type="warning")
+                    st.rerun()
 
     st.markdown("---")
     st.subheader("Available Skills")
@@ -1011,7 +1026,8 @@ def render_manage_skills():
                     with f_col1:
                         if st.form_submit_button("✅ Save Changes", use_container_width=True):
                             if edit_code != skill['code'] and any(s['code'] == edit_code for s in st.session_state.skills):
-                                st.error("Skill code already exists!")
+                                notify("Skill code already exists!", type="error")
+                                st.rerun()
                             else:
                                 skill['code'] = edit_code
                                 skill['name'] = edit_name
@@ -1125,10 +1141,11 @@ def render_manage_demand():
                 notify(f"Override created for {date_str}")
             else:
                 notify(f"Editing existing override for {date_str}")
-            st.info(f"Override enabled for {date_str}")
+            # The station-ary info below is fine as it confirms state, but the notify above provides the "pop up" feedback
             st.rerun()
 
         if date_str in st.session_state.demand["overrides"]:
+            # Keeping the warning as a clear indicator of state while editing
             st.warning(f"Editing overrides for {date_str}")
             override_data = st.session_state.demand["overrides"][date_str]
             
@@ -1194,7 +1211,6 @@ def render_manage_demand():
         else:
             st.info("No override set for this date. Default demand will be used.")
 
-
 # ---------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------
@@ -1202,23 +1218,28 @@ def render_manage_demand():
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 'Generate Schedule'
 
-st.sidebar.markdown('### Main Page')
-st.sidebar.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
+with st.sidebar:
+    st.markdown(f"### ⚡ Last Action")
+    st.info(st.session_state.last_action_message)
+    st.markdown("---")
+    
+    st.markdown('### Main Page')
+    st.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
 
-st.sidebar.markdown('### Settings')
+    st.markdown('### Settings')
 
-with st.sidebar.expander("⚙️ General Settings", expanded=False):
-    st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
-    st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
-    st.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
+    with st.expander("⚙️ General Settings", expanded=False):
+        st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
+        st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
+        st.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
 
-with st.sidebar.expander("🔐 Admin Database", expanded=False):
-    st.button("🗓️ Manage Shifts", on_click=lambda: st.session_state.update(current_page='Manage Shifts'), use_container_width=True)
-    st.button("🔧 Manage Skills", on_click=lambda: st.session_state.update(current_page='Manage Skills'), use_container_width=True)
-    st.button("🏆 Grades Hierarchy", on_click=lambda: st.session_state.update(current_page='Grades Hierarchy'), use_container_width=True)
-    st.button("🏖️ Leave Types", on_click=lambda: st.session_state.update(current_page='Leave Types'), use_container_width=True)
-    st.button("👥 Manage Staffs", on_click=lambda: st.session_state.update(current_page='Manage Staffs'), use_container_width=True)
-    st.button("📊 Minimum Demand", on_click=lambda: st.session_state.update(current_page='Minimum Demand'), use_container_width=True)
+    with st.expander("🔐 Admin Database", expanded=False):
+        st.button("🗓️ Manage Shifts", on_click=lambda: st.session_state.update(current_page='Manage Shifts'), use_container_width=True)
+        st.button("🔧 Manage Skills", on_click=lambda: st.session_state.update(current_page='Manage Skills'), use_container_width=True)
+        st.button("🏆 Grades Hierarchy", on_click=lambda: st.session_state.update(current_page='Grades Hierarchy'), use_container_width=True)
+        st.button("🏖️ Leave Types", on_click=lambda: st.session_state.update(current_page='Leave Types'), use_container_width=True)
+        st.button("👥 Manage Staffs", on_click=lambda: st.session_state.update(current_page='Manage Staffs'), use_container_width=True)
+        st.button("📊 Minimum Demand", on_click=lambda: st.session_state.update(current_page='Minimum Demand'), use_container_width=True)
 
 # ---------------------------------------------------------------------
 # Main Layout: Content
@@ -1269,7 +1290,9 @@ elif st.session_state.current_page == 'Date Range':
             start_date, end_date = end_date, start_date
 
         num_days = (end_date - start_date).days + 1
-        st.success(f"**Selected range:** {start_date.strftime('%a, %b %d, %Y')} → {end_date.strftime('%a, %b %d, %Y')}  ({num_days} days)")
+        # Range preview is fine as info/success since it's not a final "action" result, 
+        # but let's make the Apply button use notify.
+        st.info(f"**Selected range:** {start_date.strftime('%a, %b %d, %Y')} → {end_date.strftime('%a, %b %d, %Y')}  ({num_days} days)")
 
         if st.button("✅ Apply Date Range", type="primary"):
             st.session_state.roster_start_date = start_date
@@ -1375,7 +1398,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                 
                 from ortools.sat.python import cp_model
                 if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-                    st.success("Optimized schedule found!")
+                    notify("Optimized schedule found!", type="success")
+                    st.rerun() # Rerun to show the toast and updated schedule
                     
                     schedule = model.extract_solution(status)
                     
@@ -1412,7 +1436,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                     st.info(f"Lexicographic Optimization Applied: Max utilization first, then fairness.")
                     
                 else:
-                    st.error("No feasible solution found. Try adding more nurses or reducing minimum coverage requirements.")
+                    notify("No feasible solution found. Try adding more nurses or reducing minimum coverage requirements.", type="error")
+                    st.rerun()
                     
             except Exception as e:
                 import traceback
