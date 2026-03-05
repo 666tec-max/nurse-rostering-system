@@ -174,7 +174,8 @@ if 'last_action_message' not in st.session_state:
 
 def notify(message, detail=None, type="success"):
     """Queues a notification and updates the last action sidebar indicator."""
-    full_msg = f"{message}\n{detail}" if detail else message
+    # Use double newline for reliable markdown line breaks
+    full_msg = f"**{message}**\n\n{detail}" if detail else message
     st.session_state.pending_notification = (message, detail, type)
     st.session_state.last_action_message = full_msg
 
@@ -184,8 +185,8 @@ def show_notifications():
         message, detail, type = st.session_state.pending_notification
         icon = "✅" if type == "success" else "⚠️" if type == "warning" else "❌" if type == "error" else "ℹ️"
         
-        # Combine for toast
-        toast_msg = f"**{message}**\n{detail}" if detail else message
+        # Combine for toast using double newline for paragraph break
+        toast_msg = f"**{message}**\n\n{detail}" if detail else message
         st.toast(toast_msg, icon=icon)
         st.session_state.pending_notification = None
 
