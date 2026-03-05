@@ -185,8 +185,9 @@ def show_notifications():
         message, detail, type = st.session_state.pending_notification
         icon = "✅" if type == "success" else "⚠️" if type == "warning" else "❌" if type == "error" else "ℹ️"
         
-        # Combine for toast using double newline for paragraph break
-        toast_msg = f"**{message}**\n\n{detail}" if detail else message
+        # Use two spaces followed by a newline for the toast
+        # This is a standard markdown trick for line breaks within a block
+        toast_msg = f"**{message}**  \n{detail}" if detail else message
         st.toast(toast_msg, icon=icon)
         st.session_state.pending_notification = None
 
