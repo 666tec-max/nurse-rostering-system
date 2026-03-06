@@ -1523,7 +1523,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                     nurses_list=st.session_state.nurses,
                     shift_requirements=shift_requirements,
                     shifts_config=st.session_state.shifts,
-                    grade_hierarchy=st.session_state.grades
+                    grade_hierarchy=st.session_state.grades,
+                    start_date=st.session_state.roster_start_date
                 )
             except TypeError as te:
                 st.error(f"Initialization Error: {te}")
@@ -1547,22 +1548,31 @@ elif st.session_state.current_page == 'Generate Schedule':
                     min_shifts = float('inf')
                     max_shifts = float('-inf')
                     
-                    # Night shift stats
+                    # Night & Weekend stats
                     night_codes = [s['code'] for s in st.session_state.shifts if s.get('type') == 'Night']
                     nurse_night_counts = []
+                    nurse_weekend_counts = []
+                    
+                    weekend_days = []
+                    for d in range(planning_horizon):
+                        if (st.session_state.roster_start_date + timedelta(days=d)).weekday() >= 5:
+                            weekend_days.append(d)
 
                     for nurse_name, shifts in schedule.items():
                         total_shifts = sum(1 for s in shifts if s != '-')
                         night_shifts = sum(1 for s in shifts if s in night_codes)
+                        weekend_shifts = sum(1 for d_idx in weekend_days if shifts[d_idx] != '-')
                         
                         stats.append({
                             'Nurse': nurse_name, 
                             'Total Shifts': total_shifts,
-                            'Night Shifts': night_shifts
+                            'Night Shifts': night_shifts,
+                            'Weekend Shifts': weekend_shifts
                         })
                         
                         total_assigned_all += total_shifts
                         nurse_night_counts.append(night_shifts)
+                        nurse_weekend_counts.append(weekend_shifts)
                         min_shifts = min(min_shifts, total_shifts)
                         max_shifts = max_shifts if max_shifts > total_shifts else total_shifts
                     
@@ -1573,7 +1583,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                         'df': pd.DataFrame(stats),
                         'total': total_assigned_all,
                         'fairness': f"{min_shifts}-{max_shifts} shifts/nurse",
-                        'night_fairness': f"{n_min}-{n_max} nights/nurse"
+                        'night_fairness': f"{min(nurse_night_counts)}-{max(nurse_night_counts)} n/nurse",
+                        'weekend_fairness': f"{min(nurse_weekend_counts)}-{max(nurse_weekend_counts)} w/nurse"
                     }
 
                     notify("Schedule generated successfully:", detail="Optimized solution found for all constraints", type="success")
@@ -1620,12 +1631,13 @@ elif st.session_state.current_page == 'Generate Schedule':
             
             if st.session_state.get('last_stats'):
                 st.markdown("### 📊 Key Statistics")
-                meta_col1, meta_col2, meta_col3 = st.columns(3)
+                meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
                 meta_col1.metric("Total Assignments", st.session_state.last_stats['total'])
                 meta_col2.metric("Overall Fairness", st.session_state.last_stats['fairness'])
                 meta_col3.metric("Night Fairness", st.session_state.last_stats['night_fairness'])
+                meta_col4.metric("Weekend Fairness", st.session_state.last_stats['weekend_fairness'])
                 
-                st.info("🎯 **Optimization Priority:** 1. Utilization → 2. Overall Balance → 3. Night Shift Balance")
+                st.info("🎯 **Optimization Priority:** 1. Utilization → 2. Overall Balance → 3. Night Balance → 4. Weekend Balance")
                 
                 with st.expander("Detailed Shift Counts per Nurse"):
                     st.dataframe(st.session_state.last_stats['df'], use_container_width=True)

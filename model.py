@@ -1,26 +1,25 @@
 from ortools.sat.python import cp_model
 
 class NurseRosteringModel:
-    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None):
+    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None, start_date=None):
         """
         Initialize the Nurse Rostering Model.
         
         Args:
             num_nurses (int): Number of nurses.
             num_days (int): Planning horizon in days.
-            nurses_list (list): List of dictionaries, each containing nurse info (e.g., 'name', 'leave_days').
+            nurses_list (list): List of dictionaries, each containing nurse info.
             shift_requirements (dict): Dictionary mapping (day, shift) to required count.
-            shifts_config (list): List of dicts with shift details. 
-                                  Example: [{'code': 'M', 'type': 'Day', 'duration': 420}, ...]
-            allow_multiple_shifts (bool): If True, allows nurses to work multiple non-overlapping shifts in a day.
-            grade_hierarchy (list): List of lists representing grade ranks, top to bottom.
+            shifts_config (list): List of dicts with shift details.
+            grade_hierarchy (list): List of lists representing grade ranks.
+            start_date (date): The starting date of the roster (to identify weekends).
         """
         self.num_nurses = num_nurses
         self.num_days = num_days
         self.nurses = nurses_list
         self.shift_requirements = shift_requirements
-        self.shift_requirements = shift_requirements
         self.grade_hierarchy = grade_hierarchy
+        self.start_date = start_date
         
         # Parse shifts configuration
         if shifts_config:
@@ -264,7 +263,6 @@ class NurseRosteringModel:
         self.model.Add(sum(deviations) == int(self.solver.Value(sum(deviations))))
         
         # --- Step 6: Step 3 – Minimize night shift difference (Night Fairness) ---
-        # User goal: Minimize (max_nights - min_nights)
         min_nights = self.model.NewIntVar(0, self.num_days, 'min_nights')
         max_nights = self.model.NewIntVar(0, self.num_days, 'max_nights')
         self.model.AddMinEquality(min_nights, night_shifts_per_nurse)
@@ -274,10 +272,45 @@ class NurseRosteringModel:
         self.model.Add(night_diff == max_nights - min_nights)
         
         self.model.Minimize(night_diff)
-        
-        # Solve final model
         status3 = self.solver.Solve(self.model)
-        return status3
+        
+        if status3 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return status3
+            
+        # Fix night fairness for last step
+        self.model.Add(night_diff == int(self.solver.Value(night_diff)))
+        
+        # --- Step 7: Step 4 – Minimize weekend shift difference (Weekend Fairness) ---
+        weekend_shifts_per_nurse = []
+        weekend_indices = []
+        if self.start_date:
+            from datetime import timedelta
+            for d in range(self.num_days):
+                curr_date = self.start_date + timedelta(days=d)
+                if curr_date.weekday() >= 5: # Saturday=5, Sunday=6
+                    weekend_indices.append(d)
+        
+        for n in range(self.num_nurses):
+            ws = self.model.NewIntVar(0, self.num_days, f'weekend_shifts_n{n}')
+            if weekend_indices:
+                self.model.Add(ws == sum(self.x[(n, d, s)] for d in weekend_indices for s in self.shifts))
+            else:
+                self.model.Add(ws == 0)
+            weekend_shifts_per_nurse.append(ws)
+            
+        min_weekends = self.model.NewIntVar(0, self.num_days, 'min_weekends')
+        max_weekends = self.model.NewIntVar(0, self.num_days, 'max_weekends')
+        self.model.AddMinEquality(min_weekends, weekend_shifts_per_nurse)
+        self.model.AddMaxEquality(max_weekends, weekend_shifts_per_nurse)
+        
+        weekend_diff = self.model.NewIntVar(0, self.num_days, 'weekend_diff')
+        self.model.Add(weekend_diff == max_weekends - min_weekends)
+        
+        self.model.Minimize(weekend_diff)
+        
+        # Final Solve
+        status4 = self.solver.Solve(self.model)
+        return status4
     
     def extract_solution(self, status):
         """Extract the schedule if a solution exists."""
