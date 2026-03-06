@@ -1466,6 +1466,31 @@ elif st.session_state.current_page == 'Generate Schedule':
     st.header("Schedule Generation")
     st.info("The solver will prioritize filling extra shifts (utilization) while keeping the workload balanced (fairness).")
 
+    # Load Saved Roster
+    with st.expander("📂 Load Saved Roster (Cloud)", expanded=False):
+        try:
+            res = supabase.table("rosters").select("id, name, start_date, end_date, created_at").order("created_at", desc=True).execute()
+            if res.data:
+                roster_options = {
+                    r['id']: f"{r['name']} (Created: {datetime.fromisoformat(r['created_at']).strftime('%b %d, %H:%M')})"
+                    for r in res.data
+                }
+                selected_roster_id = st.selectbox("Select a Saved Roster", options=list(roster_options.keys()), format_func=lambda x: roster_options[x], label_visibility="collapsed")
+                if st.button("Load Selected Roster", type="secondary"):
+                    r_data = supabase.table("rosters").select("*").eq("id", selected_roster_id).single().execute()
+                    if r_data.data:
+                        st.session_state.last_schedule = r_data.data['schedule_data']
+                        st.session_state.roster_start_date = datetime.strptime(r_data.data['start_date'], "%Y-%m-%d").date()
+                        st.session_state.roster_end_date = datetime.strptime(r_data.data['end_date'], "%Y-%m-%d").date()
+                        st.session_state.last_stats = None
+                        st.session_state.locked_assignments = {}
+                        notify("Roster Loaded", detail=f"Successfully loaded {r_data.data['name']}", type="success")
+                        st.rerun()
+            else:
+                st.write("No saved rosters found in the cloud.")
+        except Exception as e:
+            st.error(f"Error loading rosters from cloud: {e}")
+
     if 'last_schedule' not in st.session_state:
         st.session_state.last_schedule = None
     if 'last_stats' not in st.session_state:
@@ -1668,13 +1693,31 @@ elif st.session_state.current_page == 'Generate Schedule':
                 df_schedule.to_excel(writer, sheet_name='Roster')
             excel_data = output.getvalue()
             
-            st.download_button(
-                label="📥 Download Roster as Excel",
-                data=excel_data,
-                file_name=f"roster_{roster_start.strftime('%Y%m%d')}_to_{roster_end.strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+            dl_col1, dl_col2 = st.columns(2)
+            with dl_col1:
+                st.download_button(
+                    label="📥 Download Roster as Excel",
+                    data=excel_data,
+                    file_name=f"roster_{roster_start.strftime('%Y%m%d')}_to_{roster_end.strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            
+            with dl_col2:
+                if st.button("☁️ Save Roster to Cloud", use_container_width=True):
+                    try:
+                        name = f"Schedule {roster_start.strftime('%b %d')} to {roster_end.strftime('%b %d')}"
+                        supabase.table("rosters").insert({
+                            "name": name,
+                            "start_date": roster_start.strftime("%Y-%m-%d"),
+                            "end_date": roster_end.strftime("%Y-%m-%d"),
+                            "schedule_data": st.session_state.last_schedule
+                        }).execute()
+                        notify("Saved to Cloud", detail=f"'{name}' has been securely saved to Supabase.", type="success")
+                        st.rerun()
+                    except Exception as e:
+                        notify("Save Failed", detail=str(e), type="error")
+                        st.rerun()
             
             if st.session_state.get('last_stats'):
                 st.markdown("### 📊 Key Statistics")
