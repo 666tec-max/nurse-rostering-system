@@ -1546,17 +1546,34 @@ elif st.session_state.current_page == 'Generate Schedule':
                     total_assigned_all = 0
                     min_shifts = float('inf')
                     max_shifts = float('-inf')
+                    
+                    # Night shift stats
+                    night_codes = [s['code'] for s in st.session_state.shifts if s.get('type') == 'Night']
+                    nurse_night_counts = []
+
                     for nurse_name, shifts in schedule.items():
                         total_shifts = sum(1 for s in shifts if s != '-')
-                        stats.append({'Nurse': nurse_name, 'Total Shifts': total_shifts})
+                        night_shifts = sum(1 for s in shifts if s in night_codes)
+                        
+                        stats.append({
+                            'Nurse': nurse_name, 
+                            'Total Shifts': total_shifts,
+                            'Night Shifts': night_shifts
+                        })
+                        
                         total_assigned_all += total_shifts
+                        nurse_night_counts.append(night_shifts)
                         min_shifts = min(min_shifts, total_shifts)
                         max_shifts = max_shifts if max_shifts > total_shifts else total_shifts
                     
+                    n_min = min(nurse_night_counts) if nurse_night_counts else 0
+                    n_max = max(nurse_night_counts) if nurse_night_counts else 0
+
                     st.session_state.last_stats = {
                         'df': pd.DataFrame(stats),
                         'total': total_assigned_all,
-                        'fairness': f"{min_shifts}-{max_shifts} shifts per nurse"
+                        'fairness': f"{min_shifts}-{max_shifts} shifts/nurse",
+                        'night_fairness': f"{n_min}-{n_max} nights/nurse"
                     }
 
                     notify("Schedule generated successfully:", detail="Optimized solution found for all constraints", type="success")
@@ -1605,8 +1622,10 @@ elif st.session_state.current_page == 'Generate Schedule':
                 st.markdown("### 📊 Key Statistics")
                 meta_col1, meta_col2, meta_col3 = st.columns(3)
                 meta_col1.metric("Total Assignments", st.session_state.last_stats['total'])
-                meta_col2.metric("Fairness Range", st.session_state.last_stats['fairness'])
-                meta_col3.info("🎯 Utilization Maximized\n⚖️ Fairness Balanced")
+                meta_col2.metric("Overall Fairness", st.session_state.last_stats['fairness'])
+                meta_col3.metric("Night Fairness", st.session_state.last_stats['night_fairness'])
+                
+                st.info("🎯 **Optimization Priority:** 1. Utilization → 2. Overall Balance → 3. Night Shift Balance")
                 
                 with st.expander("Detailed Shift Counts per Nurse"):
                     st.dataframe(st.session_state.last_stats['df'], use_container_width=True)

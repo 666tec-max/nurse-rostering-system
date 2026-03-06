@@ -232,23 +232,52 @@ class NurseRosteringModel:
             self.model.Add(dev >= total_assignments - (N * nurse_total_shifts[n]))
             deviations.append(dev)
         
-        # --- Step 3: Step 1 – Maximize utilization ---
+        # --- Step 3: Define Night Shifts Per Nurse ---
+        night_shifts_per_nurse = []
+        for n in range(self.num_nurses):
+            ns = self.model.NewIntVar(0, self.num_days, f'night_shifts_n{n}')
+            # Count night shifts if any are defined
+            if self.night_shifts:
+                self.model.Add(ns == sum(self.x[(n, d, s)] for d in range(self.num_days) for s in self.night_shifts))
+            else:
+                self.model.Add(ns == 0)
+            night_shifts_per_nurse.append(ns)
+
+        # --- Step 4: Step 1 – Maximize utilization ---
         self.model.Maximize(total_assignments)
         status1 = self.solver.Solve(self.model)
         
         if status1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return status1  # No feasible solution
         
-        max_total_assignments = self.solver.Value(total_assignments)
+        # Fix utilization for next steps
+        self.model.Add(total_assignments == int(self.solver.Value(total_assignments)))
         
-        # --- Step 4: Step 2 – Minimize deviations while keeping utilization ---
-        # Add constraint: total_assignments == max_total_assignments
-        self.model.Add(total_assignments == max_total_assignments)
+        # --- Step 5: Step 2 – Minimize overall deviations (General Fairness) ---
         self.model.Minimize(sum(deviations))
-        
-        # Solve again
         status2 = self.solver.Solve(self.model)
-        return status2                
+        
+        if status2 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return status2
+            
+        # Fix general fairness for last step
+        self.model.Add(sum(deviations) == int(self.solver.Value(sum(deviations))))
+        
+        # --- Step 6: Step 3 – Minimize night shift difference (Night Fairness) ---
+        # User goal: Minimize (max_nights - min_nights)
+        min_nights = self.model.NewIntVar(0, self.num_days, 'min_nights')
+        max_nights = self.model.NewIntVar(0, self.num_days, 'max_nights')
+        self.model.AddMinEquality(min_nights, night_shifts_per_nurse)
+        self.model.AddMaxEquality(max_nights, night_shifts_per_nurse)
+        
+        night_diff = self.model.NewIntVar(0, self.num_days, 'night_diff')
+        self.model.Add(night_diff == max_nights - min_nights)
+        
+        self.model.Minimize(night_diff)
+        
+        # Solve final model
+        status3 = self.solver.Solve(self.model)
+        return status3
     
     def extract_solution(self, status):
         """Extract the schedule if a solution exists."""
