@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import io
 from datetime import datetime, time, date, timedelta
 import calendar
 from model import NurseRosteringModel
@@ -1659,6 +1660,21 @@ elif st.session_state.current_page == 'Generate Schedule':
                 st.session_state.last_schedule = edited_df.to_dict(orient='index')
                 notify("Manual Edit Saved", "Shift locked. Regenerate to update statistics and other assignments.", type="success")
                 st.rerun()
+                
+            # Excel Export
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                # Save the visible/edited dataframe
+                df_schedule.to_excel(writer, sheet_name='Roster')
+            excel_data = output.getvalue()
+            
+            st.download_button(
+                label="📥 Download Roster as Excel",
+                data=excel_data,
+                file_name=f"roster_{roster_start.strftime('%Y%m%d')}_to_{roster_end.strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
             
             if st.session_state.get('last_stats'):
                 st.markdown("### 📊 Key Statistics")
