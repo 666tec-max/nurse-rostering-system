@@ -237,14 +237,23 @@ def load_data(table_name, file_path, default_data):
         st.warning(f"Could not load {table_name} from Supabase: {e}")
 
     # 2. Fallback to JSON
+    json_data = default_data
     if os.path.exists(file_path):
         try:
             with open(file_path, "r") as f:
-                data = json.load(f)
-                return data if data is not None else default_data
+                loaded = json.load(f)
+                if loaded:
+                    json_data = loaded
+                    # AUTO-MIGRATION: If Supabase was empty but JSON has data, push it up!
+                    # This happens "invisibly" the first time a user with local data connects to cloud.
+                    try:
+                        save_data(table_name, file_path, json_data)
+                    except:
+                        pass # Failure here is fine, it will stay in local fallback
         except Exception as e:
             st.error(f"Error loading {file_path}: {e}")
-    return default_data
+    
+    return json_data
 
 def save_data(table_name, file_path, data):
     """Save data to Supabase and fallback to JSON."""
@@ -1306,40 +1315,6 @@ def render_manage_demand():
         else:
             st.info("No override set for this date. Default demand will be used.")
 
-def render_cloud_sync():
-    st.write("Manage your connection to Supabase and migrate local data to the cloud.")
-    
-    st.info("💡 **Note:** Syncing will overwrite existing data in the destination. 'Push' sends your local JSON data to Supabase. 'Pull' refreshes your local app with data from the cloud.")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🚀 Push Local Data to Cloud", use_container_width=True, help="Overwrite Supabase data with your current local files"):
-            try:
-                save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
-                save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
-                save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
-                save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-                save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
-                save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
-                notify("Cloud Sync Successful", detail="All local data has been pushed to your Supabase project.")
-            except Exception as e:
-                notify("Sync Failed", detail=str(e), type="error")
-            st.rerun()
-            
-    with col2:
-        if st.button("📥 Pull Data from Cloud", use_container_width=True, help="Force reload data from Supabase"):
-            # Clearing session state to force reload from Supabase in next run
-            reloaded = []
-            for key in ["shifts", "skills", "nurses", "grades", "leaves", "demand"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-                    reloaded.append(key)
-            notify("Data Refreshed", detail=f"Reloading {', '.join(reloaded)} from Supabase.")
-            st.rerun()
-
-    st.markdown("---")
-    st.subheader("Connection Status")
-    st.success(f"Connected to Supabase project at: `{SUPABASE_URL}`")
 
 # ---------------------------------------------------------------------
 # Sidebar
@@ -1361,7 +1336,6 @@ with st.sidebar:
     with st.expander("⚙️ General Settings", expanded=False):
         st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
         st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
-        st.button("☁️ Cloud Sync", on_click=lambda: st.session_state.update(current_page='Cloud Sync'), use_container_width=True)
         st.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
 
     with st.expander("🔐 Admin Database", expanded=False):
@@ -1462,8 +1436,6 @@ elif st.session_state.current_page == 'Constraints & Rules':
     st.header("Constraints & Rules")
     st.write("Overview of the scheduling constraints and optimization objectives used by the solver.")
 
-    # Removed toggle for multiple shifts per day to maintain system simplicity
-
     st.markdown('''
     These rules are **always** enforced — the solver will never violate them.
 
@@ -1478,17 +1450,16 @@ elif st.session_state.current_page == 'Constraints & Rules':
     - **Leave Compliance:** Nurses on leave are not assigned.
     ''')
 
-elif st.session_state.current_page == 'Cloud Sync':
-    st.header("Cloud Synchronization")
-    render_cloud_sync()
-
-    st.subheader("Soft Objectives (Optimized)")
+    st.subheader("🎯 Soft Objectives (Optimized)")
     st.markdown('''
-    These goals are **optimized** — the solver tries its best to achieve them.
+    These goals are **optimized** — the solver tries its best to achieve them without violating hard rules.
 
     - **Maximize Utilization:** Assign extra nurses to shifts beyond minimums if capacity allows.
-    - **Fairness:** Balance total shifts among all nurses.
+    - **Overall Fairness:** Balance total shifts among all nurses.
+    - **Night Shift Fairness:** Distribute night shifts as evenly as possible.
+    - **Weekend Fairness:** Distribute Saturday/Sunday shifts evenly.
     ''')
+
 
 elif st.session_state.current_page == 'Generate Schedule':
     st.header("Schedule Generation")
