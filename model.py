@@ -138,6 +138,12 @@ class NurseRosteringModel:
                     # Hard constraint: x[e,d,s] = 1
                     self.model.Add(self.x[(n_idx, d, s)] == 1)
 
+            # Rule: Allow Night Shifts
+            if not nurse.get('allow_night_shift', True) and self.night_shifts:
+                for d in range(self.num_days):
+                    for s in self.night_shifts:
+                        self.model.Add(self.x[(n_idx, d, s)] == 0)
+
         # 3. Night recovery: Max 4 consecutive night shifts
         # And recovery rules:
         # 1 night -> 1 day off
@@ -161,35 +167,74 @@ class NurseRosteringModel:
                     ) <= 6
                 )
 
-        # 4b. Max 6 consecutive working days (Sliding 7-day window)
-        # For each nurse, in every sliding 7-day window, sum of assigned shifts <= 6
-        for n in range(self.num_nurses):
-            # Window size = 7
-            # We iterate d from 0 to num_days - 7
-            for start_day in range(self.num_days - 6):
-                window_days = range(start_day, start_day + 7)
+        # 4b. Per-nurse Max consecutive working days (Sliding window)
+        for n_idx, nurse in enumerate(self.nurses):
+            limit = nurse.get('max_consecutive_work_days', 6)
+            # Window size = limit + 1
+            # In any window of (limit + 1) days, the nurse can work at most 'limit' days.
+            # This ensures that after working 'limit' days in a row, the next day MUST be OFF.
+            for start_day in range(self.num_days - limit):
+                window_days = range(start_day, start_day + limit + 1)
                 self.model.Add(
                     sum(
-                        self.x[(n, d, s)]
+                        self.x[(n_idx, d, s)]
                         for d in window_days
                         for s in self.shifts
-                    ) <= 6
+                    ) <= limit
                 )
 
+        # 4c. Grade Qualification Helper
+        def is_qualified(nurse_grade, required_grade):
+            if not self.grade_hierarchy or not required_grade:
+                return True
+            
+            # Find the rank of the nurse's grade and the required grade
+            nurse_rank = -1
+            req_rank = -1
+            
+            for rank, layer in enumerate(self.grade_hierarchy):
+                for g in layer:
+                    if g['code'] == nurse_grade:
+                        nurse_rank = rank
+                    if g['code'] == required_grade:
+                        req_rank = rank
+            
+            # Higher grade has lower rank index (0 is highest)
+            # A nurse is qualified if their rank is <= (higher than or equal to) the required rank
+            if nurse_rank == -1 or req_rank == -1:
+                return nurse_grade == required_grade
+            return nurse_rank <= req_rank
+
         # 5. Shift coverage requirements (Hard Constraint: Minimum Coverage)
-        # sum_{e} x[e,d,s] >= required[(d,s)]
         if self.shift_requirements:
             for d in range(self.num_days):
                 for s in self.shifts:
                     req = self.shift_requirements.get((d, s), 0)
-                    # Handle backward compatibility: req might be an int or a dict like {"Total": 1}
+                    if not req: continue
+                    
                     if isinstance(req, dict):
-                        req_val = req.get("Total", 0)
+                        # Total requirement
+                        total_req = req.get("Total", 0)
+                        min_grade = req.get("Grade")
+                        
+                        # Apply Grade requirement to the total if specified
+                        if min_grade:
+                            qualified_nurses = [n for n in range(self.num_nurses) if is_qualified(self.nurses[n].get('grade', 'RN'), min_grade)]
+                            self.model.Add(sum(self.x[(n, d, s)] for n in qualified_nurses) >= total_req)
+                        else:
+                            self.model.Add(sum(self.x[(n, d, s)] for n in range(self.num_nurses)) >= total_req)
+                            
+                        # Skill requirements (e.g., {"ICU": 1})
+                        for key, val in req.items():
+                            if key not in ["Total", "Grade", "Color"]: # Skip metadata
+                                # This is a skill requirement
+                                skill_code = key
+                                min_count = val
+                                skilled_nurses = [n for n in range(self.num_nurses) if skill_code in self.nurses[n].get('skills', [])]
+                                self.model.Add(sum(self.x[(n, d, s)] for n in skilled_nurses) >= min_count)
                     else:
-                        req_val = req
-                    self.model.Add(
-                        sum(self.x[(n, d, s)] for n in range(self.num_nurses)) >= req_val
-                    )
+                        # Simple integer requirement
+                        self.model.Add(sum(self.x[(n, d, s)] for n in range(self.num_nurses)) >= req)
 
         # 6. Skill compatibility constraint
         # A nurse can only be assigned to a shift if they have at least one of the required skills

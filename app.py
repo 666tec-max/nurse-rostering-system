@@ -8,6 +8,7 @@ from datetime import datetime, time, date, timedelta
 import calendar
 from model import NurseRosteringModel
 from supabase import create_client, Client
+import staff_db
 
 # --- Supabase Initialization ---
 try:
@@ -371,9 +372,22 @@ if 'skills' not in st.session_state:
     st.session_state.skills.sort(key=lambda x: x['code'].upper())
 
 if 'nurses' not in st.session_state:
-    st.session_state.nurses = load_data("nurses", NURSE_DATA_FILE, [
-        {'id': f'N{i+1:03}', 'name': f'Nurse {i+1}', 'grade': 'RN', 'leave_days': [], 'skills': []} for i in range(10)
-    ])
+    raw_staff = staff_db.fetch_all_staff(supabase)
+    if not raw_staff:
+        # Fallback to JSON or defaults if Supabase is empty
+        raw_staff = load_data("nurses", NURSE_DATA_FILE, [
+            {'employee_id': f'N{i+1:03}', 'name': f'Nurse {i+1}', 'grade': 'RN', 'leave_days': [], 'skills': [], 'department_id': 'default-dept', 'allow_night_shift': True, 'max_consecutive_work_days': 6} for i in range(10)
+        ])
+    
+    # Map employee_id to id for backward compatibility
+    for s in raw_staff:
+        if 'employee_id' in s:
+            s['id'] = s['employee_id']
+        elif 'id' in s:
+            s['employee_id'] = s['id']
+            s['id'] = s['employee_id']
+            
+    st.session_state.nurses = raw_staff
 
 if 'grades' not in st.session_state:
     # Hierarchy is a list of layers, from top (senior) to bottom (junior)
@@ -854,160 +868,258 @@ def render_manage_leave_types():
                     notify("Leave type deleted successfully:", detail=f"'{deleted_leave}' removed")
                     st.rerun()
 
-def render_manage_staffs():
-    with st.expander("Add New Nurse", expanded=False):
-        col_id, col_name, col_grade = st.columns([1, 2, 2])
-        with col_id:
-            new_nurse_id = st.text_input("Nurse ID", key="new_nurse_id", placeholder="e.g. N001")
-        with col_name:
-            new_nurse_name = st.text_input("Nurse Name", key="new_nurse_name")
-        with col_grade:
-            all_grades = [g['code'] for layer in st.session_state.grades for g in layer]
-            new_nurse_grade = st.selectbox("Grade", all_grades if all_grades else ["RN"], key="new_nurse_grade")
+# ---------------------------------------------------------------------
+# Staff Management Dialogs
+# ---------------------------------------------------------------------
+
+@st.dialog("Edit Employee")
+def edit_staff_dialog(staff_member):
+    st.write(f"Editing: **{staff_member['name']}** ({staff_member['employee_id']})")
+    
+    with st.form("edit_staff_form"):
+        new_name = st.text_input("Name", value=staff_member['name'])
         
-        col_dept, col_btn = st.columns([3, 1])
-        with col_dept:
-            dept_options = [d['name'] for d in st.session_state.departments]
-            dept_ids = [d['id'] for d in st.session_state.departments]
-            new_nurse_dept_idx = st.selectbox("Department", range(len(dept_options)), format_func=lambda i: dept_options[i], key="new_nurse_dept")
-        with col_btn:
-            st.write("") # Spacer
-            if st.button("Add", use_container_width=True):
-                if new_nurse_name and new_nurse_id:
-                    new_nurse = {
-                        'id': new_nurse_id,
-                        'name': new_nurse_name, 
-                        'grade': new_nurse_grade, 
-                        'department_id': dept_ids[new_nurse_dept_idx] if dept_ids else 'default-dept',
-                        'leave_days': [],
-                        'skills': []
-                    }
-                    dept_name = dept_options[new_nurse_dept_idx] if dept_options else 'N/A'
-                    st.session_state.nurses.append(new_nurse)
-                    save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
-                    notify("Nurse added successfully:", detail=f"[{new_nurse_id}] {new_nurse_name} ({new_nurse_grade}) → {dept_name}")
-                    st.rerun()
-                else:
-                    notify("Add Nurse Failed", detail="Please enter ID and name.", type="warning")
-                    st.rerun()
-
-    st.markdown("---")
-    st.subheader("Current Nurses")
-
-    for i, nurse in enumerate(st.session_state.nurses):
-        if 'grade' not in nurse:
-            nurse['grade'] = nurse.get('role', 'RN')
-        if 'id' not in nurse:
-            nurse['id'] = f"N{i+1:03}"
-        if 'department_id' not in nurse:
-            nurse['department_id'] = 'default-dept'
-
-        # Resolve department name for display
-        nurse_dept_name = next((d['name'] for d in st.session_state.departments if d['id'] == nurse.get('department_id')), 'Unassigned')
+        # Grade
+        all_grades = [g['code'] for layer in st.session_state.grades for g in layer]
+        if not all_grades: all_grades = ["RN"]
+        curr_grade_idx = all_grades.index(staff_member['grade']) if staff_member['grade'] in all_grades else 0
+        new_grade = st.selectbox("Grade", all_grades, index=curr_grade_idx)
+        
+        # Department
+        dept_names = [d['name'] for d in st.session_state.departments]
+        dept_ids = [d['id'] for d in st.session_state.departments]
+        curr_dept_idx = dept_ids.index(staff_member.get('department_id')) if staff_member.get('department_id') in dept_ids else 0
+        new_dept_idx = st.selectbox("Department", range(len(dept_names)), format_func=lambda idx: dept_names[idx], index=curr_dept_idx)
+        
+        # Skills
+        skill_options = [f"{skill['code']}" for skill in st.session_state.skills]
+        curr_skills = staff_member.get('skills', [])
+        new_skills = st.multiselect("Skills", options=skill_options, default=[s for s in curr_skills if s in skill_options])
+        
+        # Constraints
+        st.write("---")
+        c1, c2 = st.columns(2)
+        with c1:
+            new_night = st.toggle("Allow Night Shifts", value=staff_member.get('allow_night_shift', True))
+        with c2:
+            new_consec = st.number_input("Max Consecutive Days", min_value=1, max_value=14, value=staff_member.get('max_consecutive_work_days', 6))
             
-        with st.expander(f"[{nurse['id']}] {nurse['name']} ({nurse['grade']}) — {nurse_dept_name}"):
-            col_id, col_name, col_grade, col_dept = st.columns([1, 2, 1, 1])
-            updated = False
-            
-            with col_id:
-                new_id = st.text_input(f"ID", value=nurse['id'], key=f"id_{i}")
-                if new_id != nurse['id']:
-                    nurse['id'] = new_id
-                    updated = True
+        if st.form_submit_button("Save Changes", use_container_width=True):
+            updates = {
+                "name": new_name,
+                "grade": new_grade,
+                "department_id": dept_ids[new_dept_idx],
+                "skills": new_skills,
+                "allow_night_shift": new_night,
+                "max_consecutive_work_days": int(new_consec)
+            }
+            try:
+                staff_db.update_staff(supabase, staff_member['employee_id'], updates)
+                # Refresh session state
+                updated_staff = staff_db.fetch_all_staff(supabase)
+                for s in updated_staff: 
+                    s['id'] = s['employee_id'] # Map for compatibility
+                st.session_state.nurses = updated_staff
+                notify("Employee Updated", f"Changes saved for {new_name}")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error updating staff: {e}")
 
-            with col_name:
-                new_name = st.text_input(f"Name", value=nurse['name'], key=f"name_{i}")
-                if new_name != nurse['name']:
-                    nurse['name'] = new_name
-                    updated = True
-                
-            with col_grade:
+@st.dialog("Delete Employee")
+def delete_staff_dialog(staff_member):
+    st.warning(f"Are you sure you want to delete **{staff_member['name']}**?")
+    st.write(f"Employee ID: {staff_member['employee_id']}")
+    st.write("This action cannot be undone and will affect future rosters.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Cancel", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("Delete", type="primary", use_container_width=True):
+            try:
+                staff_db.delete_staff(supabase, staff_member['employee_id'])
+                # Refresh session state
+                updated_staff = staff_db.fetch_all_staff(supabase)
+                for s in updated_staff: 
+                    s['id'] = s['employee_id'] # Map for compatibility
+                st.session_state.nurses = updated_staff
+                notify("Employee Deleted", f"{staff_member['name']} has been removed.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error deleting staff: {e}")
+
+def render_manage_staffs():
+    st.subheader("👥 Personnel Management")
+    
+    # --- Custom CSS for Table Styling ---
+    st.markdown("""
+        <style>
+        .staff-table-header {
+            display: flex;
+            background-color: #F8F9FA;
+            padding: 12px 10px;
+            border-radius: 8px 8px 0 0;
+            font-weight: 700;
+            border-bottom: 2px solid #DEE2E6;
+            color: #333;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .staff-row {
+            padding: 12px 10px;
+            border-bottom: 1px solid #EEE;
+            transition: background 0.2s ease;
+        }
+        .staff-row:hover {
+            background-color: #F1F3F5;
+        }
+        [data-testid="stVerticalBlock"] > div:has(div.staff-row) {
+            gap: 0 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 1. Add New Employee Form
+    with st.expander("➕ Add New Employee", expanded=False):
+        with st.form("add_staff_form", clear_on_submit=True):
+            c1, c2, c3 = st.columns([2, 1, 1])
+            with c1:
+                add_name = st.text_input("Name", placeholder="Full Name")
+            with c2:
+                add_id = st.text_input("Employee ID", placeholder="e.g. EMP001")
+            with c3:
                 all_grades = [g['code'] for layer in st.session_state.grades for g in layer]
-                if not all_grades: all_grades = ["RN"]
-                current_index = all_grades.index(nurse['grade']) if nurse['grade'] in all_grades else 0
-                new_grade = st.selectbox("Grade", all_grades, index=current_index, key=f"grade_{i}")
-                if new_grade != nurse['grade']:
-                    nurse['grade'] = new_grade
-                    updated = True
-
-            with col_dept:
+                add_grade = st.selectbox("Grade", all_grades if all_grades else ["RN"])
+            
+            c4, c5 = st.columns([2, 1])
+            with c4:
                 dept_names = [d['name'] for d in st.session_state.departments]
                 dept_ids = [d['id'] for d in st.session_state.departments]
-                current_dept_idx = dept_ids.index(nurse.get('department_id')) if nurse.get('department_id') in dept_ids else 0
-                new_dept_idx = st.selectbox("Department", range(len(dept_names)), format_func=lambda idx: dept_names[idx], index=current_dept_idx, key=f"dept_{i}")
-                if dept_ids[new_dept_idx] != nurse.get('department_id'):
-                    nurse['department_id'] = dept_ids[new_dept_idx]
-                    updated = True
-
-            col_leaves, col_reqs, col_skills = st.columns([2, 2, 2])
-            with col_leaves:
-                leaves_str = ",".join(map(str, nurse['leave_days']))
-                new_leaves_str = st.text_input(
-                    f"Leave Days", 
-                    value=leaves_str, 
-                    key=f"leaves_{i}",
-                    help="Comma-separated day numbers"
-                )
-                try:
-                    if new_leaves_str.strip():
-                        leaves_list = [int(x.strip()) for x in new_leaves_str.split(',') if x.strip().isdigit()]
-                        valid_leaves = [d for d in leaves_list if 0 <= d < planning_horizon]
-                        if valid_leaves != nurse['leave_days']:
-                            nurse['leave_days'] = valid_leaves
-                            updated = True
-                    elif nurse['leave_days']:
-                        nurse['leave_days'] = []
-                        updated = True
-                except ValueError:
-                    notify("Update Failed", detail="Invalid leave format. Use comma-separated numbers.", type="error")
-                    st.rerun()
-
-            with col_reqs:
-                current_requests = nurse.get('must_have_shifts', [])
-                req_str = ", ".join([f"{r['day']}:{r['shift']}" for r in current_requests])
-                new_req_str = st.text_input("Requests (Day:Shift)", value=req_str, key=f"reqs_{i}")
-                # ... same parsing logic as before ...
-                try:
-                    parsed_reqs = []
-                    if new_req_str.strip():
-                        parts = new_req_str.split(',')
-                        for p in parts:
-                            if ':' in p:
-                                d_str, s_str = p.split(':')
-                                d = int(d_str.strip())
-                                s = s_str.strip()
-                                valid_shifts = [sh['code'] for sh in st.session_state.shifts]
-                                if 0 <= d < planning_horizon and s in valid_shifts:
-                                    parsed_reqs.append({'day': d, 'shift': s})
-                    parsed_reqs.sort(key=lambda x: x['day'])
-                    current_sorted = sorted(current_requests, key=lambda x: x['day']) if current_requests else []
-                    if parsed_reqs != current_sorted:
-                        nurse['must_have_shifts'] = parsed_reqs
-                        updated = True
-                except ValueError: pass
-
-            with col_skills:
-                skill_options = [f"{skill['code']} - {skill['name']}" for skill in st.session_state.skills]
-                current_nurse_skills = nurse.get('skills', [])
-                current_skill_options = [f"{skill['code']} - {skill['name']}" for skill in st.session_state.skills if skill['code'] in current_nurse_skills]
-                edit_nurse_skills = st.multiselect("Skills", options=skill_options, default=current_skill_options, key=f"nurse_skills_{i}")
-                edit_nurse_skills_codes = [skill.split(' - ')[0] for skill in edit_nurse_skills]
-                if edit_nurse_skills_codes != current_nurse_skills:
-                    nurse['skills'] = edit_nurse_skills_codes
-                    updated = True
-
-            if st.button("Delete Nurse", key=f"delete_{i}", type="primary", use_container_width=True):
-                deleted_nurse = st.session_state.nurses[i]['name']
-                st.session_state.nurses.pop(i)
-                save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
-                notify("Nurse deleted successfully:", detail=f"'{deleted_nurse}' removed")
-                st.rerun()
+                add_dept_idx = st.selectbox("Department", range(len(dept_names)), format_func=lambda i: dept_names[i])
+            with c5:
+                skill_options = [skill['code'] for skill in st.session_state.skills]
+                add_skills = st.multiselect("Skills", options=skill_options)
             
-            if updated:
-                if st.button("Save Changes", key=f"save_nurse_{i}", use_container_width=True):
-                    save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
-                    notify("Nurse updated successfully:", detail=f"Changes saved for {nurse['name']}")
-                    st.rerun()
+            st.write("---")
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                add_night = st.toggle("Allow Night Shifts", value=True)
+            with cc2:
+                add_consec = st.number_input("Max Consecutive Days", min_value=1, max_value=14, value=6)
+                
+            if st.form_submit_button("Add Personnel", use_container_width=True):
+                if add_name and add_id:
+                    # Check if ID already exists in session state to prevent duplicates before DB call
+                    if any(n['employee_id'] == add_id for n in st.session_state.nurses):
+                        st.error(f"Employee ID {add_id} already exists!")
+                    else:
+                        new_record = {
+                            "employee_id": add_id,
+                            "name": add_name,
+                            "grade": add_grade,
+                            "department_id": dept_ids[add_dept_idx],
+                            "skills": add_skills,
+                            "allow_night_shift": add_night,
+                            "max_consecutive_work_days": int(add_consec),
+                            "leave_days": []
+                        }
+                        try:
+                            staff_db.insert_staff(supabase, new_record)
+                            updated_staff = staff_db.fetch_all_staff(supabase)
+                            for s in updated_staff: s['id'] = s['employee_id']
+                            st.session_state.nurses = updated_staff
+                            notify("Employee Added", f"{add_name} added successfully.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error adding staff: {e}")
+                else:
+                    st.error("Name and Employee ID are required.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 2. Search, Filter, and Sort Bar
+    with st.container(border=True):
+        sb1, sb2, sb3, sb4, sb5 = st.columns([2, 1, 1, 2, 1.2])
+        with sb1:
+            search_query = st.text_input("🔍 Search", placeholder="Name or ID").lower()
+        with sb2:
+            grade_filter = st.selectbox("Grade", ["All"] + sorted(list(set(n.get('grade', 'RN') for n in st.session_state.nurses))))
+        with sb3:
+            dept_names_map = {d['id']: d['name'] for d in st.session_state.departments}
+            dept_ids_list = ["All"] + [d['id'] for d in st.session_state.departments]
+            dept_filter_id = st.selectbox("Department", dept_ids_list, format_func=lambda x: dept_names_map.get(x, "All"))
+        with sb4:
+            skill_options = sorted(list(set(sk['code'] for sk in st.session_state.skills)))
+            skill_filter = st.multiselect("Filter by Skills", options=skill_options)
+        with sb5:
+            sort_by = st.selectbox("Sort By", ["Name", "ID"])
+
+    # 3. Filtering and Sorting Logic
+    filtered_staff = st.session_state.nurses
+    if search_query:
+        filtered_staff = [n for n in filtered_staff if search_query in n['name'].lower() or search_query in n['employee_id'].lower()]
+    if grade_filter != "All":
+        filtered_staff = [n for n in filtered_staff if n.get('grade') == grade_filter]
+    if dept_filter_id != "All":
+        filtered_staff = [n for n in filtered_staff if n.get('department_id') == dept_filter_id]
+    if skill_filter:
+        filtered_staff = [n for n in filtered_staff if all(skill in n.get('skills', []) for skill in skill_filter)]
+    
+    if sort_by == "Name":
+        filtered_staff = sorted(filtered_staff, key=lambda x: x['name'])
+    else:
+        filtered_staff = sorted(filtered_staff, key=lambda x: x['employee_id'])
+
+    # 4. Table Display with Scrollable Body
+    # Header
+    st.markdown("""
+        <div class='staff-table-header'>
+            <div style='flex: 2;'>Name</div>
+            <div style='flex: 1.5;'>Employee ID</div>
+            <div style='flex: 1;'>Grade</div>
+            <div style='flex: 1.5;'>Department</div>
+            <div style='flex: 2.5;'>Skills</div>
+            <div style='flex: 1; text-align: center;'>Actions</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Body
+    with st.container(height=500, border=False):
+        if not filtered_staff:
+            st.info("No personnel found matching the current criteria.")
+        else:
+            for idx, s in enumerate(filtered_staff):
+                with st.container():
+                    st.markdown("<div class='staff-row'>", unsafe_allow_html=True)
+                    r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([2, 1.5, 1, 1.5, 2.5, 1])
+                    
+                    with r_col1:
+                        st.write(f"**{s['name']}**")
+                    with r_col2:
+                        st.write(f"`{s['employee_id']}`")
+                    with r_col3:
+                        st.write(s.get('grade', 'RN'))
+                    with r_col4:
+                        st.write(dept_names_map.get(s.get('department_id'), 'Unassigned'))
+                    with r_col5:
+                        skills = s.get('skills', [])
+                        if skills:
+                            skill_html = "".join([f"<span style='background: #E9ECEF; color: #495057; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; margin-right: 4px; border: 1px solid #DEE2E6;'>{sk}</span>" for sk in skills])
+                            st.markdown(skill_html, unsafe_allow_html=True)
+                        else:
+                            st.write("<span style='color: #ADB5BD; font-size: 0.8em;'>None</span>", unsafe_allow_html=True)
+                    
+                    with r_col6:
+                        btn_col1, btn_col2 = st.columns(2)
+                        with btn_col1:
+                            if st.button("✏️", key=f"edit_{s['employee_id']}_{idx}", help="Edit"):
+                                edit_staff_dialog(s)
+                        with btn_col2:
+                            if st.button("🗑️", key=f"del_{s['employee_id']}_{idx}", help="Delete"):
+                                delete_staff_dialog(s)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
 def render_manage_skills():
     # --- Custom Styling for Skill Cards ---
@@ -1225,27 +1337,33 @@ def render_manage_departments():
     st.write("Create and manage departments. Staff members are assigned to one primary department.")
     with st.expander("Add New Department", expanded=False):
         with st.form("add_department_form", clear_on_submit=True):
-            new_dept_name = st.text_input("Department Name", help="e.g., ICU, Emergency, Cardiology")
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                new_dept_id = st.text_input("Department ID", help="e.g., ICU, ER, CARD")
+            with col2:
+                new_dept_name = st.text_input("Department Name", help="e.g., ICU, Emergency, Cardiology")
 
             if st.form_submit_button("Add Department", use_container_width=True):
-                if new_dept_name:
-                    if any(d['name'].lower() == new_dept_name.lower() for d in st.session_state.departments):
+                if new_dept_id and new_dept_name:
+                    if any(d['id'].lower() == new_dept_id.lower() for d in st.session_state.departments):
+                        notify("Add Department Failed", detail="A department with this ID already exists!", type="error")
+                        st.rerun()
+                    elif any(d['name'].lower() == new_dept_name.lower() for d in st.session_state.departments):
                         notify("Add Department Failed", detail="A department with this name already exists!", type="error")
                         st.rerun()
                     else:
-                        import uuid
                         new_dept = {
-                            "id": str(uuid.uuid4()),
+                            "id": new_dept_id,
                             "name": new_dept_name,
                             "description": ""
                         }
                         st.session_state.departments.append(new_dept)
                         st.session_state.departments.sort(key=lambda x: x['name'].upper())
                         save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
-                        notify("Department added successfully:", detail=f"'{new_dept_name}' created")
+                        notify("Department added successfully:", detail=f"[{new_dept_id}] {new_dept_name} created")
                         st.rerun()
                 else:
-                    notify("Action Failed", detail="Department name is required.", type="warning")
+                    notify("Action Failed", detail="ID and Name are required.", type="warning")
                     st.rerun()
 
     st.markdown("---")
@@ -1268,7 +1386,7 @@ def render_manage_departments():
                     st.markdown(f"""
                     <div class="dept-card" style="margin-bottom: 0; border: none; box-shadow: none; padding: 0;">
                         <div class="dept-info">
-                            <div class="dept-icon">🏢</div>
+                            <div class="dept-icon" style="font-size: 1rem; border: 2px solid #B3D9F2; background: #E8F4FD; padding: 4px 8px; border-radius: 6px; font-family: monospace;">{dept['id']}</div>
                             <div>
                                 <span class="dept-name">{dept['name']}</span><br>
                                 <span class="dept-count">{nurse_count} staff member{'s' if nurse_count != 1 else ''}</span>
@@ -1299,20 +1417,40 @@ def render_manage_departments():
             if st.session_state.editing_dept_id == dept['id']:
                 with st.form(f"edit_dept_form_{dept['id']}"):
                     st.write(f"**Edit Department: {dept['name']}**")
-                    edit_name = st.text_input("Name", value=dept['name'])
+                    col1, col2 = st.columns([1, 2])
+                    with col1:
+                        edit_id = st.text_input("ID", value=dept['id'])
+                    with col2:
+                        edit_name = st.text_input("Name", value=dept['name'])
 
                     f_col1, f_col2 = st.columns(2)
                     with f_col1:
                         if st.form_submit_button("✅ Save Changes", use_container_width=True):
-                            if edit_name != dept['name'] and any(d['name'].lower() == edit_name.lower() for d in st.session_state.departments if d['id'] != dept['id']):
+                            if edit_id != dept['id'] and any(d['id'].lower() == edit_id.lower() for d in st.session_state.departments):
+                                notify("Update Failed", detail="A department with this ID already exists!", type="error")
+                                st.rerun()
+                            elif edit_name != dept['name'] and any(d['name'].lower() == edit_name.lower() for d in st.session_state.departments if d['id'] != dept['id']):
                                 notify("Update Failed", detail="A department with this name already exists!", type="error")
                                 st.rerun()
                             else:
+                                old_id = dept['id']
+                                dept['id'] = edit_id
                                 dept['name'] = edit_name
                                 st.session_state.departments.sort(key=lambda x: x['name'].upper())
                                 save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
+                                
+                                # Cascade ID change to nurses
+                                if old_id != edit_id:
+                                    updated_nurses = 0
+                                    for nurse in st.session_state.nurses:
+                                        if nurse.get('department_id') == old_id:
+                                            nurse['department_id'] = edit_id
+                                            updated_nurses += 1
+                                    if updated_nurses > 0:
+                                        save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
+                                
                                 st.session_state.editing_dept_id = None
-                                notify("Department updated successfully:", detail=f"Renamed to '{edit_name}'")
+                                notify("Department updated successfully:", detail=f"[{edit_id}] {edit_name} updated" + (f" ({updated_nurses} staff sync)" if old_id != edit_id and updated_nurses > 0 else ""))
                                 st.rerun()
                     with f_col2:
                         if st.form_submit_button("❌ Cancel", use_container_width=True):
