@@ -6,6 +6,16 @@ import os
 from datetime import datetime, time, date, timedelta
 import calendar
 from model import NurseRosteringModel
+from supabase import create_client, Client
+
+# --- Supabase Initialization ---
+try:
+    SUPABASE_URL = st.secrets["supabase"]["url"]
+    SUPABASE_KEY = st.secrets["supabase"]["key"]
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    st.error(f"Supabase configuration error: {e}")
+    st.stop()
 
 st.set_page_config(page_title="Nurse Rostering System", layout="wide")
 
@@ -191,8 +201,42 @@ def show_notifications():
         st.toast(toast_msg, icon=icon)
         st.session_state.pending_notification = None
 
-def load_data(file_path, default_data):
-    """Load data from JSON file or return default."""
+def load_data(table_name, file_path, default_data):
+    """Load data from Supabase, falling back to JSON or default."""
+    try:
+        # 1. Try Supabase
+        response = supabase.table(table_name).select("*").execute()
+        if response.data:
+            # Table-specific post-processing
+            if table_name == "grades":
+                # Reconstruct hierarchy: list of lists
+                layers = {}
+                for g in response.data:
+                    idx = g['layer_index']
+                    if idx not in layers: layers[idx] = []
+                    layers[idx].append({"code": g['code'], "name": g['name']})
+                return [layers[i] for i in sorted(layers.keys())]
+            
+            if table_name == "demand":
+                # Reconstruct demand dict
+                demand = {"default": {}, "overrides": {}}
+                for d in response.data:
+                    type_str = d['type']
+                    date_key = d['date_key']
+                    shift = d['shift_code']
+                    skill = d['skill_code'] or "Total"
+                    count = d['count']
+                    
+                    if date_key not in demand[type_str]: demand[type_str][date_key] = {}
+                    if shift not in demand[type_str][date_key]: demand[type_str][date_key][shift] = {}
+                    demand[type_str][date_key][shift][skill] = count
+                return demand
+                
+            return response.data
+    except Exception as e:
+        st.warning(f"Could not load {table_name} from Supabase: {e}")
+
+    # 2. Fallback to JSON
     if os.path.exists(file_path):
         try:
             with open(file_path, "r") as f:
@@ -202,13 +246,59 @@ def load_data(file_path, default_data):
             st.error(f"Error loading {file_path}: {e}")
     return default_data
 
-def save_data(file_path, data):
-    """Save data to JSON file."""
+def save_data(table_name, file_path, data):
+    """Save data to Supabase and fallback to JSON."""
+    try:
+        # Success flag for UI feedback
+        cloud_success = False
+        
+        # Table-specific pre-processing and UPSERT
+        if table_name == "grades":
+            # Flatten hierarchy for storage
+            flattened = []
+            for idx, layer in enumerate(data):
+                for g in layer:
+                    flattened.append({"layer_index": idx, "code": g['code'], "name": g['name']})
+            # Clear and repopulate (simple for small config tables)
+            supabase.table(table_name).delete().neq("id", -1).execute() # Clear all
+            if flattened:
+                supabase.table(table_name).insert(flattened).execute()
+            cloud_success = True
+            
+        elif table_name == "demand":
+            # Flatten demand dict
+            rows = []
+            for typ in ["default", "overrides"]:
+                for d_key, shifts in data.get(typ, {}).items():
+                    for s_code, skills in shifts.items():
+                        for skill, count in skills.items():
+                            rows.append({
+                                "type": typ,
+                                "date_key": d_key,
+                                "shift_code": s_code,
+                                "skill_code": None if skill == "Total" else skill,
+                                "count": count
+                            })
+            supabase.table(table_name).delete().neq("id", -1).execute()
+            if rows:
+                supabase.table(table_name).insert(rows).execute()
+            cloud_success = True
+            
+        elif table_name in ["nurses", "shifts", "skills", "leaves"]:
+            # Standard UPSERT
+            # Use id as the primary key for matching
+            supabase.table(table_name).upsert(data).execute()
+            cloud_success = True
+            
+    except Exception as e:
+        st.error(f"Supabase Save Error ({table_name}): {e}")
+
+    # Also save to local JSON as backup
     try:
         with open(file_path, "w") as f:
             json.dump(data, f, indent=4)
     except Exception as e:
-        st.error(f"Error saving {file_path}: {e}")
+        st.error(f"Local Save Error ({file_path}): {e}")
 
 # Default Shifts
 DEFAULT_SHIFTS = [
@@ -252,7 +342,7 @@ date_labels = [(roster_start + timedelta(days=d)).strftime("%a, %b %d") for d in
 # Data Initialization
 # ---------------------------------------------------------------------
 if 'shifts' not in st.session_state:
-    st.session_state.shifts = load_data(SHIFTS_DATA_FILE, DEFAULT_SHIFTS)
+    st.session_state.shifts = load_data("shifts", SHIFTS_DATA_FILE, DEFAULT_SHIFTS)
     for s in st.session_state.shifts:
         if 'color' not in s:
             s['color'] = "#E0E0E0"
@@ -260,21 +350,21 @@ if 'shifts' not in st.session_state:
             s['required_skills'] = []
 
 if 'skills' not in st.session_state:
-    st.session_state.skills = load_data(SKILLS_DATA_FILE, DEFAULT_SKILLS)
+    st.session_state.skills = load_data("skills", SKILLS_DATA_FILE, DEFAULT_SKILLS)
     for sk in st.session_state.skills:
         if 'color' not in sk:
             sk['color'] = "#F0F4F8"
     st.session_state.skills.sort(key=lambda x: x['code'].upper())
 
 if 'nurses' not in st.session_state:
-    st.session_state.nurses = load_data(NURSE_DATA_FILE, [
+    st.session_state.nurses = load_data("nurses", NURSE_DATA_FILE, [
         {'id': f'N{i+1:03}', 'name': f'Nurse {i+1}', 'grade': 'RN', 'leave_days': [], 'skills': []} for i in range(10)
     ])
 
 if 'grades' not in st.session_state:
     # Hierarchy is a list of layers, from top (senior) to bottom (junior)
     # Each layer is a list of grade objects: {"code": "SN", "name": "Staff Nurse"}
-    raw_grades = load_data(GRADES_DATA_FILE, [
+    raw_grades = load_data("grades", GRADES_DATA_FILE, [
         [{"code": "SN", "name": "Sister"}],
         [{"code": "RN", "name": "Registered Nurse"}],
         [{"code": "EN", "name": "Enrolled Nurse"}],
@@ -293,11 +383,11 @@ if 'leaves' not in st.session_state:
         {"code": "SL", "name": "Sick Leave", "description": "Paid sick leave", "color": "#FFF5F5", "is_paid": True},
         {"code": "UL", "name": "Unpaid Leave", "description": "Unpaid leave of absence", "color": "#F7FAFC", "is_paid": False}
     ]
-    st.session_state.leaves = load_data(LEAVES_DATA_FILE, DEFAULT_LEAVES)
+    st.session_state.leaves = load_data("leaves", LEAVES_DATA_FILE, DEFAULT_LEAVES)
 
 if 'demand' not in st.session_state:
     # Default demand: { 'default': { 'shift_code': { 'skill_code': min_count, 'Total': min_count } }, 'overrides': { 'YYYY-MM-DD': { ... } } }
-    st.session_state.demand = load_data(DEMAND_DATA_FILE, {
+    st.session_state.demand = load_data("demand", DEMAND_DATA_FILE, {
         "default": {},
         "overrides": {}
     })
@@ -421,7 +511,7 @@ def render_manage_shifts():
                         st.session_state.shifts.append(new_shift)
                         # Automatic Sort by Start Time
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
-                        save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
+                        save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
                         notify("Shift added successfully:", detail=f"{new_shift_code} - {new_shift_name} ({new_shift_type})")
                         st.rerun()
                 else:
@@ -471,7 +561,7 @@ def render_manage_shifts():
                 if st.button("🗑️", key=f"del_btn_{stable_key}", help="Delete Shift", use_container_width=True):
                     deleted_name = st.session_state.shifts[i]['name']
                     st.session_state.shifts.pop(i)
-                    save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
+                    save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
                     notify("Shift deleted successfully:", detail=f"'{deleted_name}' removed")
                     st.rerun()
             
@@ -531,7 +621,7 @@ def render_manage_shifts():
                         
                         # Automatic Sort by Start Time
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
-                        save_data(SHIFTS_DATA_FILE, st.session_state.shifts)
+                        save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
                         st.session_state.editing_shift_id = None
                         notify("Shift updated successfully:", detail=f"{s['code']} - {s['name']}")
                         st.rerun()
@@ -599,7 +689,7 @@ def render_manage_grades():
     with col_add:
         if st.button("➕ Add Layer to Bottom", use_container_width=True):
             st.session_state.grades.append([])
-            save_data(GRADES_DATA_FILE, st.session_state.grades)
+            save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
             notify("Layer added successfully:", detail="New empty level added to bottom")
             st.rerun()
     with col_rem:
@@ -609,7 +699,7 @@ def render_manage_grades():
                 # For now just delete if empty or warning.
                 if not st.session_state.grades[-1] or st.button("Confirm Delete Non-Empty Layer"):
                     st.session_state.grades.pop()
-                    save_data(GRADES_DATA_FILE, st.session_state.grades)
+                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
                     notify("Layer removed successfully:", detail="Bottom level deleted")
                     st.rerun()
 
@@ -628,7 +718,7 @@ def render_manage_grades():
                 if st.button("Add Grade", key=f"add_g_btn_{i}", use_container_width=True):
                     if new_g_code and new_g_name:
                         st.session_state.grades[i].append({"code": new_g_code, "name": new_g_name})
-                        save_data(GRADES_DATA_FILE, st.session_state.grades)
+                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
                         notify("Grade added successfully:", detail=f"'{new_g_code}' added to Level {i+1}")
                         st.rerun()
             
@@ -642,7 +732,7 @@ def render_manage_grades():
                     if c3.button("🗑️", key=f"del_g_{i}_{j}"):
                         deleted_grade = st.session_state.grades[i][j]['code']
                         st.session_state.grades[i].pop(j)
-                        save_data(GRADES_DATA_FILE, st.session_state.grades)
+                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
                         notify("Grade deleted successfully:", detail=f"'{deleted_grade}' removed")
                         st.rerun()
 
@@ -651,13 +741,13 @@ def render_manage_grades():
             if i > 0:
                 if m1.button(f"⬆️ Move Level {i+1} Up", key=f"up_layer_{i}"):
                     st.session_state.grades[i-1], st.session_state.grades[i] = st.session_state.grades[i], st.session_state.grades[i-1]
-                    save_data(GRADES_DATA_FILE, st.session_state.grades)
+                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
                     notify("Layer moved successfully:", detail=f"Level {i+1} shifted up")
                     st.rerun()
             if i < len(st.session_state.grades) - 1:
                 if m2.button(f"⬇️ Move Level {i+1} Down", key=f"down_layer_{i}"):
                     st.session_state.grades[i], st.session_state.grades[i+1] = st.session_state.grades[i+1], st.session_state.grades[i]
-                    save_data(GRADES_DATA_FILE, st.session_state.grades)
+                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
                     notify("Layer moved successfully:", detail=f"Level {i+1} shifted down")
                     st.rerun()
 
@@ -690,7 +780,7 @@ def render_manage_leave_types():
                             "color": new_color,
                             "is_paid": new_is_paid
                         })
-                        save_data(LEAVES_DATA_FILE, st.session_state.leaves)
+                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
                         notify("Leave type added successfully:", detail=f"{new_code} - {new_name}")
                         st.rerun()
                 else:
@@ -739,14 +829,14 @@ def render_manage_leave_types():
             with col_save:
                 if updated:
                     if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
-                        save_data(LEAVES_DATA_FILE, st.session_state.leaves)
+                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
                         notify("Leave type updated successfully:", detail=f"Changes for '{leave['name']}' saved")
                         st.rerun()
             with col_del:
                 if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
                     deleted_leave = st.session_state.leaves[i]['name']
                     st.session_state.leaves.pop(i)
-                    save_data(LEAVES_DATA_FILE, st.session_state.leaves)
+                    save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
                     notify("Leave type deleted successfully:", detail=f"'{deleted_leave}' removed")
                     st.rerun()
 
@@ -773,7 +863,7 @@ def render_manage_staffs():
                         'skills': []
                     }
                     st.session_state.nurses.append(new_nurse)
-                    save_data(NURSE_DATA_FILE, st.session_state.nurses)
+                    save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
                     notify("Nurse added successfully:", detail=f"[{new_nurse_id}] {new_nurse_name} ({new_nurse_grade})")
                     st.rerun()
                 else:
@@ -874,13 +964,13 @@ def render_manage_staffs():
             if st.button("Delete Nurse", key=f"delete_{i}", type="primary", use_container_width=True):
                 deleted_nurse = st.session_state.nurses[i]['name']
                 st.session_state.nurses.pop(i)
-                save_data(NURSE_DATA_FILE, st.session_state.nurses)
+                save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
                 notify("Nurse deleted successfully:", detail=f"'{deleted_nurse}' removed")
                 st.rerun()
             
             if updated:
                 if st.button("Save Changes", key=f"save_nurse_{i}", use_container_width=True):
-                    save_data(NURSE_DATA_FILE, st.session_state.nurses)
+                    save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
                     notify("Nurse updated successfully:", detail=f"Changes saved for {nurse['name']}")
                     st.rerun()
 
@@ -963,7 +1053,7 @@ def render_manage_skills():
                         }
                         st.session_state.skills.append(new_skill)
                         st.session_state.skills.sort(key=lambda x: x['code'].upper())
-                        save_data(SKILLS_DATA_FILE, st.session_state.skills)
+                        save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
                         notify("Skill added successfully:", detail=f"{new_skill_code} - {new_skill_name}")
                         st.rerun()
                 else:
@@ -1014,7 +1104,7 @@ def render_manage_skills():
                     if st.button("🗑️", key=f"del_skill_{stable_key}", help="Delete Skill"):
                         deleted_skill = st.session_state.skills[i]['name']
                         st.session_state.skills.pop(i)
-                        save_data(SKILLS_DATA_FILE, st.session_state.skills)
+                        save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
                         notify("Skill deleted successfully:", detail=f"'{deleted_skill}' removed")
                         st.rerun()
 
@@ -1040,7 +1130,7 @@ def render_manage_skills():
                                 skill['description'] = edit_desc
                                 skill['color'] = edit_color
                                 st.session_state.skills.sort(key=lambda x: x['code'].upper())
-                                save_data(SKILLS_DATA_FILE, st.session_state.skills)
+                                save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
                                 st.session_state.editing_skill_id = None
                                 notify("Skill updated successfully:", detail=f"{edit_code} - {edit_name}")
                                 st.rerun()
@@ -1131,7 +1221,7 @@ def render_manage_demand():
                         st.rerun()
 
         if st.button("Save Default Demand", type="primary"):
-            save_data(DEMAND_DATA_FILE, st.session_state.demand)
+            save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
             notify("Default demand saved:", detail="Minimum coverage requirements updated successfully")
             st.rerun()
 
@@ -1204,17 +1294,52 @@ def render_manage_demand():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Save Override", type="primary"):
-                    save_data(DEMAND_DATA_FILE, st.session_state.demand)
+                    save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
                     notify("Override saved:", detail=f"Custom requirements for {date_str} updated")
                     st.rerun()
             with col2:
                 if st.button("Delete Override", type="secondary"):
                     del st.session_state.demand["overrides"][date_str]
-                    save_data(DEMAND_DATA_FILE, st.session_state.demand)
+                    save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
                     notify("Override deleted:", detail=f"Custom requirements for {date_str} removed")
                     st.rerun()
         else:
             st.info("No override set for this date. Default demand will be used.")
+
+def render_cloud_sync():
+    st.write("Manage your connection to Supabase and migrate local data to the cloud.")
+    
+    st.info("💡 **Note:** Syncing will overwrite existing data in the destination. 'Push' sends your local JSON data to Supabase. 'Pull' refreshes your local app with data from the cloud.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🚀 Push Local Data to Cloud", use_container_width=True, help="Overwrite Supabase data with your current local files"):
+            try:
+                save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
+                save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
+                save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
+                save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+                save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
+                notify("Cloud Sync Successful", detail="All local data has been pushed to your Supabase project.")
+            except Exception as e:
+                notify("Sync Failed", detail=str(e), type="error")
+            st.rerun()
+            
+    with col2:
+        if st.button("📥 Pull Data from Cloud", use_container_width=True, help="Force reload data from Supabase"):
+            # Clearing session state to force reload from Supabase in next run
+            reloaded = []
+            for key in ["shifts", "skills", "nurses", "grades", "leaves", "demand"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+                    reloaded.append(key)
+            notify("Data Refreshed", detail=f"Reloading {', '.join(reloaded)} from Supabase.")
+            st.rerun()
+
+    st.markdown("---")
+    st.subheader("Connection Status")
+    st.success(f"Connected to Supabase project at: `{SUPABASE_URL}`")
 
 # ---------------------------------------------------------------------
 # Sidebar
@@ -1236,6 +1361,7 @@ with st.sidebar:
     with st.expander("⚙️ General Settings", expanded=False):
         st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
         st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
+        st.button("☁️ Cloud Sync", on_click=lambda: st.session_state.update(current_page='Cloud Sync'), use_container_width=True)
         st.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
 
     with st.expander("🔐 Admin Database", expanded=False):
@@ -1351,6 +1477,10 @@ elif st.session_state.current_page == 'Constraints & Rules':
         - 4 Nights → 3 Days Off
     - **Leave Compliance:** Nurses on leave are not assigned.
     ''')
+
+elif st.session_state.current_page == 'Cloud Sync':
+    st.header("Cloud Synchronization")
+    render_cloud_sync()
 
     st.subheader("Soft Objectives (Optimized)")
     st.markdown('''
