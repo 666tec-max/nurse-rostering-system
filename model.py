@@ -1,7 +1,7 @@
 from ortools.sat.python import cp_model
 
 class NurseRosteringModel:
-    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None, start_date=None):
+    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None, start_date=None, locked_assignments=None):
         """
         Initialize the Nurse Rostering Model.
         
@@ -13,6 +13,7 @@ class NurseRosteringModel:
             shifts_config (list): List of dicts with shift details.
             grade_hierarchy (list): List of lists representing grade ranks.
             start_date (date): The starting date of the roster (to identify weekends).
+            locked_assignments (dict): Dictionary mapping (nurse_idx, day_idx) to shift_code or '-'.
         """
         self.num_nurses = num_nurses
         self.num_days = num_days
@@ -20,6 +21,7 @@ class NurseRosteringModel:
         self.shift_requirements = shift_requirements
         self.grade_hierarchy = grade_hierarchy
         self.start_date = start_date
+        self.locked_assignments = locked_assignments or {}
         
         # Parse shifts configuration
         if shifts_config:
@@ -203,6 +205,17 @@ class NurseRosteringModel:
                     if required_skills and not any(skill in nurse_skills for skill in required_skills):
                         # Nurse cannot be assigned to this shift
                         self.model.Add(self.x[(n_idx, d, shift_code)] == 0)
+
+        # 7. Locked Assignments (Manual Overrides)
+        for (n_idx, d_idx), shift_code in self.locked_assignments.items():
+            if 0 <= n_idx < self.num_nurses and 0 <= d_idx < self.num_days:
+                if shift_code == '-':
+                    # Enforce OFF day
+                    for s in self.shifts:
+                        self.model.Add(self.x[(n_idx, d_idx, s)] == 0)
+                elif shift_code in self.shifts:
+                    # Enforce specific shift
+                    self.model.Add(self.x[(n_idx, d_idx, shift_code)] == 1)
 
     def solve_model(self):
         """Solve the model using lexicographic objectives: maximize utilization, then minimize deviations."""

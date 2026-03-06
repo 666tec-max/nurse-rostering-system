@@ -1469,6 +1469,8 @@ elif st.session_state.current_page == 'Generate Schedule':
         st.session_state.last_schedule = None
     if 'last_stats' not in st.session_state:
         st.session_state.last_stats = None
+    if 'locked_assignments' not in st.session_state:
+        st.session_state.locked_assignments = {}
 
     if st.button("Generate Optimized Schedule", type="primary"):
         with st.spinner("Optimizing for utilization and fairness..."):
@@ -1487,6 +1489,15 @@ elif st.session_state.current_page == 'Generate Schedule':
                     req_dict = day_demand.get(s['code'], {"Total": 1})
                     shift_requirements[(d_idx, s['code'])] = req_dict
 
+            # Convert UI locks (Nurse Name -> index) to model locks (Nurse Index -> index)
+            model_locked_assignments = {}
+            for (n_name, d_idx), s_code in st.session_state.locked_assignments.items():
+                try:
+                    n_idx = next(i for i, n in enumerate(st.session_state.nurses) if n['name'] == n_name)
+                    model_locked_assignments[(n_idx, d_idx)] = s_code
+                except StopIteration:
+                    pass
+
             try:
                 model = NurseRosteringModel(
                     num_nurses=len(st.session_state.nurses),
@@ -1495,7 +1506,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                     shift_requirements=shift_requirements,
                     shifts_config=st.session_state.shifts,
                     grade_hierarchy=st.session_state.grades,
-                    start_date=st.session_state.roster_start_date
+                    start_date=st.session_state.roster_start_date,
+                    locked_assignments=model_locked_assignments
                 )
             except TypeError as te:
                 st.error(f"Initialization Error: {te}")
@@ -1585,20 +1597,68 @@ elif st.session_state.current_page == 'Generate Schedule':
             else:
                 st.warning(f"⚠️ Roster date range mismatch (Last: {len(df_schedule.columns)} days, System: {len(date_labels)} days). Please regenerate.")
             
-            def color_schedule(val):
-                if not isinstance(val, str): return ''
-                current_colors = {s['code']: s.get('color', '#FFFFFF') for s in st.session_state.shifts}
-                first_val = val.split(',')[0].strip()
-                color = current_colors.get(first_val, '#FFFFFF')
-                if val == '-':
-                    return 'background-color: transparent; color: #999;'
-                return f'background-color: {color}; color: #333; font-weight: bold;'
+            st.info("💡 You can manually change shifts below. Any manual edits will be **🔒 locked** and respected during regeneration.")
+            
+            if st.session_state.locked_assignments:
+                if st.button("🔓 Clear All Manual Locks"):
+                    st.session_state.locked_assignments = {}
+                    notify("Locks cleared", "All manual assignments unlocked. You can now regenerate the schedule.", type="success")
+                    st.rerun()
 
-            st.dataframe(
-                df_schedule.style.map(color_schedule), 
+            shift_options = ['-'] + [s['code'] for s in st.session_state.shifts]
+            col_config = {
+                col: st.column_config.SelectboxColumn("Shift", options=shift_options, required=True)
+                for col in date_labels
+            }
+
+            def style_schedule(df):
+                styled_df = pd.DataFrame('', index=df.index, columns=df.columns)
+                for i, col in enumerate(df.columns):
+                    for nurse in df.index:
+                        val = df.at[nurse, col]
+                        is_locked = (nurse, i) in st.session_state.locked_assignments
+                        
+                        current_colors = {s['code']: s.get('color', '#FFFFFF') for s in st.session_state.shifts}
+                        first_val = val.split(',')[0].strip() if isinstance(val, str) else ''
+                        color = current_colors.get(first_val, '#FFFFFF')
+                        
+                        if val == '-':
+                            base_style = 'background-color: transparent; color: #999;'
+                        else:
+                            base_style = f'background-color: {color}; color: #333; font-weight: bold;'
+                            
+                        if is_locked:
+                            # Red outline for locked cells
+                            base_style += ' outline: 2px solid #E74C3C; outline-offset: -2px;' 
+                            
+                        styled_df.at[nurse, col] = base_style
+                return styled_df
+
+            edited_df = st.data_editor(
+                df_schedule.style.apply(style_schedule, axis=None), 
+                column_config=col_config,
                 use_container_width=True,
-                height=min(400, 50 + len(df_schedule) * 35)
+                height=min(400, 50 + len(df_schedule) * 35),
+                key="roster_editor"
             )
+            
+            # Detect changes from editor
+            has_changes = False
+            for nurse in edited_df.index:
+                for i, col in enumerate(date_labels):
+                    old_val = df_schedule.at[nurse, col]
+                    if isinstance(old_val, str):
+                        old_val = old_val.split(',')[0].strip()
+                    new_val = edited_df.at[nurse, col]
+                    if old_val != new_val:
+                        st.session_state.locked_assignments[(nurse, i)] = new_val
+                        has_changes = True
+                        
+            if has_changes:
+                # Update underlying last_schedule so that the next run reflects the new edits
+                st.session_state.last_schedule = edited_df.to_dict(orient='index')
+                notify("Manual Edit Saved", "Shift locked. Regenerate to update statistics and other assignments.", type="success")
+                st.rerun()
             
             if st.session_state.get('last_stats'):
                 st.markdown("### 📊 Key Statistics")
