@@ -1494,6 +1494,11 @@ elif st.session_state.current_page == 'Generate Schedule':
     st.header("Schedule Generation")
     st.info("The solver will prioritize filling extra shifts (utilization) while keeping the workload balanced (fairness).")
 
+    if 'last_schedule' not in st.session_state:
+        st.session_state.last_schedule = None
+    if 'last_stats' not in st.session_state:
+        st.session_state.last_stats = None
+
     if st.button("Generate Optimized Schedule", type="primary"):
         with st.spinner("Optimizing for utilization and fairness..."):
             
@@ -1533,47 +1538,80 @@ elif st.session_state.current_page == 'Generate Schedule':
                 
                 from ortools.sat.python import cp_model
                 if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-                    notify("Schedule generated successfully:", detail="Optimized solution found for all constraints", type="success")
-                    st.rerun() # Rerun to show the toast and updated schedule
-                    
                     schedule = model.extract_solution(status)
+                    st.session_state.last_schedule = schedule
                     
-                    df_schedule = pd.DataFrame.from_dict(schedule, orient='index')
-                    df_schedule.columns = date_labels
-                    
-                    def color_schedule(val):
-                        current_colors = {s['code']: s.get('color', '#FFFFFF') for s in st.session_state.shifts}
-                        color = current_colors.get(val, 'white')
-                        if val == '-':
-                            return 'background-color: white; color: black'
-                        
-                        return f'background-color: {color}; color: black; font-weight: bold'
-
-                    st.dataframe(df_schedule.style.map(color_schedule), use_container_width=True)
-                    
+                    # Pre-calculate stats for persistence
                     stats = []
                     total_assigned_all = 0
                     min_shifts = float('inf')
                     max_shifts = float('-inf')
-
                     for nurse_name, shifts in schedule.items():
                         total_shifts = sum(1 for s in shifts if s != '-')
                         stats.append({'Nurse': nurse_name, 'Total Shifts': total_shifts})
                         total_assigned_all += total_shifts
                         min_shifts = min(min_shifts, total_shifts)
                         max_shifts = max_shifts if max_shifts > total_shifts else total_shifts
-
-                    df_stats = pd.DataFrame(stats)
-                    st.dataframe(df_stats, use_container_width=True)
-
-                    st.metric("Total Shifts Assigned", total_assigned_all)
-                    st.metric("Shift Fairness", f"{min_shifts}-{max_shifts} shifts per nurse")
-                    st.info(f"Lexicographic Optimization Applied: Max utilization first, then fairness.")
                     
+                    st.session_state.last_stats = {
+                        'df': pd.DataFrame(stats),
+                        'total': total_assigned_all,
+                        'fairness': f"{min_shifts}-{max_shifts} shifts per nurse"
+                    }
+
+                    notify("Schedule generated successfully:", detail="Optimized solution found for all constraints", type="success")
+                    st.rerun() # Rerun to show the toast and updated schedule
                 else:
+                    st.session_state.last_schedule = None
+                    st.session_state.last_stats = None
                     notify("Schedule generation failed:", detail="No feasible solution found. Try adding more nurses or reducing requirements.", type="error")
                     st.rerun()
                     
             except Exception as e:
                 import traceback
-                st.error(f"An error occurred: {e}\n{traceback.format_exc()}")
+                st.error(f"An error occurred during generation: {e}\n{traceback.format_exc()}")
+
+    # --- Persistent Rendering (Outside Button) ---
+    if st.session_state.get('last_schedule'):
+        st.markdown("---")
+        st.subheader("📅 Optimized Roster")
+        
+        try:
+            schedule_data = st.session_state.last_schedule
+            df_schedule = pd.DataFrame.from_dict(schedule_data, orient='index')
+            
+            # Safety check: Match columns to date_labels
+            if len(df_schedule.columns) == len(date_labels):
+                df_schedule.columns = date_labels
+            else:
+                st.warning(f"⚠️ Roster date range mismatch (Last: {len(df_schedule.columns)} days, System: {len(date_labels)} days). Please regenerate.")
+            
+            def color_schedule(val):
+                if not isinstance(val, str): return ''
+                current_colors = {s['code']: s.get('color', '#FFFFFF') for s in st.session_state.shifts}
+                first_val = val.split(',')[0].strip()
+                color = current_colors.get(first_val, '#FFFFFF')
+                if val == '-':
+                    return 'background-color: transparent; color: #999;'
+                return f'background-color: {color}; color: #333; font-weight: bold;'
+
+            st.dataframe(
+                df_schedule.style.map(color_schedule), 
+                use_container_width=True,
+                height=min(400, 50 + len(df_schedule) * 35)
+            )
+            
+            if st.session_state.get('last_stats'):
+                st.markdown("### 📊 Key Statistics")
+                meta_col1, meta_col2, meta_col3 = st.columns(3)
+                meta_col1.metric("Total Assignments", st.session_state.last_stats['total'])
+                meta_col2.metric("Fairness Range", st.session_state.last_stats['fairness'])
+                meta_col3.info("🎯 Utilization Maximized\n⚖️ Fairness Balanced")
+                
+                with st.expander("Detailed Shift Counts per Nurse"):
+                    st.dataframe(st.session_state.last_stats['df'], use_container_width=True)
+        except Exception as display_err:
+            st.error(f"Display Error: {display_err}")
+            st.button("Clear Saved Roster", on_click=lambda: st.session_state.update(last_schedule=None))
+    elif st.session_state.current_page == 'Generate Schedule':
+        st.info("No schedule generated yet. Click the button above to start.")
