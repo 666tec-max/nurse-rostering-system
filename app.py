@@ -1822,6 +1822,12 @@ elif st.session_state.current_page == 'Soft Constraints':
 elif st.session_state.current_page == 'Generate Schedule':
     st.header("Schedule Generation")
     
+    # --- Local Date Sync ---
+    roster_start = st.session_state.roster_start_date
+    roster_end = st.session_state.roster_end_date
+    planning_horizon = (roster_end - roster_start).days + 1
+    date_labels = [(roster_start + timedelta(days=d)).strftime("%a, %b %d") for d in range(planning_horizon)]
+    
     # --- Selection & Period Row ---
     with st.container(border=True):
         col_gen1, col_gen2 = st.columns([1, 1])
@@ -1873,27 +1879,33 @@ elif st.session_state.current_page == 'Generate Schedule':
             if isinstance(selected_range, tuple) and len(selected_range) == 2:
                 st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
             
-    # --- Automated Roster Loading (Fix: defined after selected_dept_id) ---
+    # --- Automated Roster Loading ---
+    def fetch_latest_roster(dept_id, start, end):
+        try:
+            res = supabase.table("rosters").select("*") \
+                .eq("department_id", dept_id) \
+                .eq("start_date", start.strftime("%Y-%m-%d")) \
+                .eq("end_date", end.strftime("%Y-%m-%d")) \
+                .order("created_at", desc=True) \
+                .limit(1) \
+                .execute()
+            
+            if res.data:
+                latest = res.data[0]
+                st.session_state.last_schedule = latest['schedule_data']
+                st.session_state.last_stats = None 
+                st.session_state.locked_assignments = {}
+                return True
+            return False
+        except Exception as e:
+            st.error(f"Fetch failed: {e}")
+            return False
+
     if selected_dept_id:
         if st.session_state.get('last_schedule') is None:
-            try:
-                res = supabase.table("rosters").select("*") \
-                    .eq("department_id", selected_dept_id) \
-                    .eq("start_date", st.session_state.roster_start_date.strftime("%Y-%m-%d")) \
-                    .eq("end_date", st.session_state.roster_end_date.strftime("%Y-%m-%d")) \
-                    .order("created_at", desc=True) \
-                    .limit(1) \
-                    .execute()
-                
-                if res.data:
-                    latest = res.data[0]
-                    st.session_state.last_schedule = latest['schedule_data']
-                    st.session_state.last_stats = None 
-                    st.session_state.locked_assignments = {}
-                    notify("Roster Auto-Loaded", detail=f"Fetched the latest saved roster for **{selected_dept_name}**.", type="success")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Auto-load failed: {e}")
+            if fetch_latest_roster(selected_dept_id, roster_start, roster_end):
+                notify("Roster Auto-Loaded", detail=f"Fetched the latest saved roster for **{selected_dept_name}**.", type="success")
+                st.rerun()
 
     if 'last_schedule' not in st.session_state:
         st.session_state.last_schedule = None
@@ -1901,6 +1913,39 @@ elif st.session_state.current_page == 'Generate Schedule':
         st.session_state.last_stats = None
     if 'locked_assignments' not in st.session_state:
         st.session_state.locked_assignments = {}
+
+    # --- Sync Stats if Missing ---
+    if st.session_state.last_schedule and st.session_state.last_stats is None:
+        try:
+            stats = []
+            total_assigned_all = 0
+            min_shifts = float('inf')
+            max_shifts = float('-inf')
+            night_codes = [s['code'] for s in st.session_state.shifts if s.get('type') == 'Night']
+            nurse_night_counts = []
+            nurse_weekend_counts = []
+            weekend_days = [d for d in range(planning_horizon) if (roster_start + timedelta(days=d)).weekday() >= 5]
+            
+            for nurse_name, shifts in st.session_state.last_schedule.items():
+                total_s = sum(1 for s in shifts if s != '-')
+                night_s = sum(1 for s in shifts if s in night_codes)
+                weekend_s = sum(1 for d_idx in weekend_days if d_idx < len(shifts) and shifts[d_idx] != '-')
+                stats.append({'Nurse': nurse_name, 'Total Shifts': total_s, 'Night Shifts': night_s, 'Weekend Shifts': weekend_s})
+                total_assigned_all += total_s
+                nurse_night_counts.append(night_s)
+                nurse_weekend_counts.append(weekend_s)
+                min_shifts = min(min_shifts, total_s)
+                max_shifts = max(max_shifts, total_s)
+            
+            st.session_state.last_stats = {
+                'df': pd.DataFrame(stats),
+                'total': total_assigned_all,
+                'fairness': f"{min_shifts}-{max_shifts} shifts/nurse",
+                'night_fairness': f"{min(nurse_night_counts)}-{max(nurse_night_counts)} n/nurse",
+                'weekend_fairness': f"{min(nurse_weekend_counts)}-{max(nurse_weekend_counts)} w/nurse"
+            }
+        except Exception as e:
+            st.error(f"Stats sync error: {e}")
 
     # Filter nurses by selected department
     if selected_dept_id:
@@ -1930,9 +1975,18 @@ elif st.session_state.current_page == 'Generate Schedule':
             st.progress(w['night_fairness'] / 10.0)
             st.caption(f"🗓️ Weekend Fairness (**{w['weekend_fairness']}**/10)")
             st.progress(w['weekend_fairness'] / 10.0)
-    st.markdown("<br>", unsafe_allow_html=True)
+    
+    col_act1, col_act2 = st.columns([2, 1])
+    with col_act1:
+        gen_btn = st.button("Generate Optimized Schedule", type="primary", use_container_width=True)
+    with col_act2:
+        if st.button("🔄 Refresh Local Data", use_container_width=True):
+            st.session_state.last_schedule = None
+            st.rerun()
 
-    if st.button("Generate Optimized Schedule", type="primary"):
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    if gen_btn:
         if not dept_nurses:
             notify("Generation Failed", detail=f"No staff assigned to '{selected_dept_name}'. Add staff to this department first.", type="error")
             st.rerun()
@@ -2036,8 +2090,21 @@ elif st.session_state.current_page == 'Generate Schedule':
                         'weekend_fairness': f"{min(nurse_weekend_counts)}-{max(nurse_weekend_counts)} w/nurse"
                     }
 
-                    notify("Schedule generated successfully:", detail="Optimized solution found for all constraints", type="success")
-                    st.rerun() # Rerun to show the toast and updated schedule
+                    # --- Automated Save on Generation ---
+                    try:
+                        name = f"Auto-Saved {selected_dept_name} {roster_start.strftime('%b %d')}"
+                        supabase.table("rosters").insert({
+                            "name": name,
+                            "start_date": roster_start.strftime("%Y-%m-%d"),
+                            "end_date": roster_end.strftime("%Y-%m-%d"),
+                            "schedule_data": schedule,
+                            "department_id": selected_dept_id
+                        }).execute()
+                        notify("Schedule Generated & Saved", detail=f"Optimized roster for {selected_dept_name} is now persistent.", type="success")
+                    except Exception as save_err:
+                        notify("Generation Success (Save Failed)", detail=str(save_err), type="warning")
+                    
+                    st.rerun() 
                 else:
                     st.session_state.last_schedule = None
                     st.session_state.last_stats = None
@@ -2085,10 +2152,14 @@ elif st.session_state.current_page == 'Generate Schedule':
             with ctrl_col2:
                 st.write("🖌️ **Shift Painter**")
                 p_cols = st.columns(len(shift_options))
+                shift_colors_map = {s['code']: s.get('color', '#E0E0E0') for s in st.session_state.shifts}
                 for idx, opt in enumerate(shift_options):
                     is_active = st.session_state.painter_shift == opt
                     btn_type = "primary" if is_active else "secondary"
-                    if p_cols[idx].button(opt, key=f"painter_{opt}", type=btn_type, use_container_width=True):
+                    # Add a colored dot if it's a shift
+                    color_dot = "⚪" if opt == "-" else "●"
+                    btn_label = f"{color_dot} {opt}"
+                    if p_cols[idx].button(btn_label, key=f"painter_{opt}", type=btn_type, use_container_width=True):
                         st.session_state.painter_shift = opt if not is_active else None
                         st.rerun()
 
@@ -2125,6 +2196,20 @@ elif st.session_state.current_page == 'Generate Schedule':
                 st.session_state.locked_assignments[(n_name, d_idx)] = new_shift
                 # Update schedule data immediately for the next render
                 st.session_state.last_schedule[n_name][d_idx] = new_shift
+                
+                # --- Automated Save on Edit ---
+                try:
+                    name = f"Updated {selected_dept_name} {roster_start.strftime('%b %d')}"
+                    supabase.table("rosters").insert({
+                        "name": name,
+                        "start_date": roster_start.strftime("%Y-%m-%d"),
+                        "end_date": roster_end.strftime("%Y-%m-%d"),
+                        "schedule_data": st.session_state.last_schedule,
+                        "department_id": selected_dept_id
+                    }).execute()
+                except Exception as e:
+                    notify("Manual Change Saved Locally", detail="Cloud sync failed, change persists in session only.", type="warning")
+                
                 st.rerun()
                 
             # Excel Export
