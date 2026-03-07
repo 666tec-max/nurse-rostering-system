@@ -185,6 +185,12 @@ if 'pending_notification' not in st.session_state:
 if 'last_action_message' not in st.session_state:
     st.session_state.last_action_message = "System Ready"
 
+def reset_form_keys(keys):
+    """Utility to clear specific keys from session state to reset forms."""
+    for key in keys:
+        if key in st.session_state:
+            del st.session_state[key]
+
 def notify(message, detail=None, type="success"):
     """Queues a notification and updates the last action sidebar indicator."""
     # Use double newline for reliable markdown line breaks
@@ -491,25 +497,25 @@ def render_manage_shifts():
     st.write("Add new shift types according to the hospital's operating requirements.")
     with st.expander("Add New Shift", expanded=False):
         with st.form("add_shift_form", clear_on_submit=True):
-            new_shift_code = st.text_input("Code (e.g., D1)", max_chars=5)
-            new_shift_name = st.text_input("Name")
-            new_shift_type = st.selectbox("Type", ["Day", "Night"])
+            new_shift_code = st.text_input("Code (e.g., D1)", max_chars=5, key="new_shift_code")
+            new_shift_name = st.text_input("Name", key="new_shift_name")
+            new_shift_type = st.selectbox("Type", ["Day", "Night"], key="new_shift_type")
             
             st.write("**Shift Time**")
             col_s_h, col_s_m, col_arrow, col_e_h, col_e_m = st.columns([2, 2, 1, 2, 2])
             
             with col_s_h:
-                new_s_h = st.selectbox("Start Hour", hours, index=7)
+                new_s_h = st.selectbox("Start Hour", hours, index=7, key="new_shift_s_h")
             with col_s_m:
-                new_s_m = st.selectbox("Start Min", minutes, index=0)
+                new_s_m = st.selectbox("Start Min", minutes, index=0, key="new_shift_s_m")
             with col_arrow:
                 st.markdown("<div style='text-align: center; padding-top: 30px;'>➡️</div>", unsafe_allow_html=True)
             with col_e_h:
-                new_e_h = st.selectbox("End Hour", hours, index=15)
+                new_e_h = st.selectbox("End Hour", hours, index=15, key="new_shift_e_h")
             with col_e_m:
-                new_e_m = st.selectbox("End Min", minutes, index=0)
+                new_e_m = st.selectbox("End Min", minutes, index=0, key="new_shift_e_m")
                 
-            new_shift_color = st.color_picker("Color", "#E0E0E0")
+            new_shift_color = st.color_picker("Color", "#E0E0E0", key="new_shift_color")
             
             if st.form_submit_button("Add Shift", use_container_width=True):
                 if new_shift_code and new_shift_name:
@@ -541,6 +547,11 @@ def render_manage_shifts():
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
                         save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
                         notify("Shift added successfully:", detail=f"{new_shift_code} - {new_shift_name} ({new_shift_type})")
+                        
+                        # Clear form state and refresh
+                        reset_form_keys(["new_shift_code", "new_shift_name", "new_shift_type", 
+                                       "new_shift_s_h", "new_shift_s_m", "new_shift_e_h", 
+                                       "new_shift_e_m", "new_shift_color"])
                         st.rerun()
                 else:
                     notify("Add Shift Failed", detail="Code and Name are required.", type="warning")
@@ -735,20 +746,23 @@ def render_manage_grades():
     for i, layer in enumerate(st.session_state.grades):
         with st.expander(f"Level {i+1} Management", expanded=(i==0)):
             # Add Grade to this layer
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col1:
-                new_g_code = st.text_input("Code", key=f"new_g_code_{i}", max_chars=5)
-            with col2:
-                new_g_name = st.text_input("Full Name", key=f"new_g_name_{i}")
-            with col3:
-                st.write("") # Spacer
-                st.write("") # Spacer
-                if st.button("Add Grade", key=f"add_g_btn_{i}", use_container_width=True):
-                    if new_g_code and new_g_name:
-                        st.session_state.grades[i].append({"code": new_g_code, "name": new_g_name})
-                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-                        notify("Grade added successfully:", detail=f"'{new_g_code}' added to Level {i+1}")
-                        st.rerun()
+            with st.form(f"add_g_form_{i}", clear_on_submit=True):
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col1:
+                    new_g_code = st.text_input("Code", key=f"new_g_code_{i}", max_chars=5)
+                with col2:
+                    new_g_name = st.text_input("Full Name", key=f"new_g_name_{i}")
+                with col3:
+                    st.write("") # Spacer
+                    st.write("") # Spacer
+                    if st.form_submit_button("Add Grade", use_container_width=True):
+                        if new_g_code and new_g_name:
+                            st.session_state.grades[i].append({"code": new_g_code, "name": new_g_name})
+                            save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                            notify("Grade added successfully:", detail=f"'{new_g_code}' added to Level {i+1}")
+                            # Clear form keys
+                            reset_form_keys([f"new_g_code_{i}", f"new_g_name_{i}"])
+                            st.rerun()
             
             # Current Grades in this layer
             if layer:
@@ -779,21 +793,22 @@ def render_manage_grades():
                     notify("Layer moved successfully:", detail=f"Level {i+1} shifted down")
                     st.rerun()
 
+
 def render_manage_leave_types():
     with st.expander("Add New Leave Type", expanded=False):
         with st.form("add_leave_form", clear_on_submit=True):
             col_code, col_name, col_paid = st.columns([1, 2, 1])
             with col_code:
-                new_code = st.text_input("Code (e.g., ML)", max_chars=5)
+                new_code = st.text_input("Code (e.g., ML)", max_chars=5, key="new_leave_code")
             with col_name:
-                new_name = st.text_input("Leave Name")
+                new_name = st.text_input("Leave Name", key="new_leave_name")
             with col_paid:
                 st.write("") # Spacer
                 st.write("") # Spacer
-                new_is_paid = st.checkbox("Paid Leave", value=True)
+                new_is_paid = st.checkbox("Paid Leave", value=True, key="new_leave_paid")
                 
-            new_desc = st.text_input("Description")
-            new_color = st.color_picker("Color", "#E0E0E0")
+            new_desc = st.text_input("Description", key="new_leave_desc")
+            new_color = st.color_picker("Color", "#E0E0E0", key="new_leave_color")
             
             if st.form_submit_button("Add Leave Type", use_container_width=True):
                 if new_code and new_name:
@@ -801,15 +816,20 @@ def render_manage_leave_types():
                         notify("Add Leave Type Failed", detail="Leave code already exists!", type="error")
                         st.rerun()
                     else:
-                        st.session_state.leaves.append({
+                        new_leave = {
                             "code": new_code,
                             "name": new_name,
                             "description": new_desc,
                             "color": new_color,
                             "is_paid": new_is_paid
-                        })
+                        }
+                        st.session_state.leaves.append(new_leave)
                         save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
-                        notify("Leave type added successfully:", detail=f"{new_code} - {new_name}")
+                        notify("Leave Type added successfully:", detail=f"{new_code} - {new_name}")
+                        
+                        # Clear form state and refresh
+                        reset_form_keys(["new_leave_code", "new_leave_name", "new_leave_paid", 
+                                       "new_leave_desc", "new_leave_color"])
                         st.rerun()
                 else:
                     notify("Action Failed", detail="Code and Name are required.", type="warning")
@@ -986,28 +1006,28 @@ def render_manage_staffs():
         with st.form("add_staff_form", clear_on_submit=True):
             c1, c2, c3 = st.columns([2, 1, 1])
             with c1:
-                add_name = st.text_input("Name", placeholder="Full Name")
+                add_name = st.text_input("Name", placeholder="Full Name", key="add_staff_name")
             with c2:
-                add_id = st.text_input("Employee ID", placeholder="e.g. EMP001")
+                add_id = st.text_input("Employee ID", placeholder="e.g. EMP001", key="add_staff_id")
             with c3:
                 all_grades = [g['code'] for layer in st.session_state.grades for g in layer]
-                add_grade = st.selectbox("Grade", all_grades if all_grades else ["RN"])
+                add_grade = st.selectbox("Grade", all_grades if all_grades else ["RN"], key="add_staff_grade")
             
             c4, c5 = st.columns([2, 1])
             with c4:
                 dept_names = [d['name'] for d in st.session_state.departments]
                 dept_ids = [d['id'] for d in st.session_state.departments]
-                add_dept_idx = st.selectbox("Department", range(len(dept_names)), format_func=lambda i: dept_names[i])
+                add_dept_idx = st.selectbox("Department", range(len(dept_names)), format_func=lambda i: dept_names[i], key="add_staff_dept")
             with c5:
                 skill_options = [skill['code'] for skill in st.session_state.skills]
-                add_skills = st.multiselect("Skills", options=skill_options)
+                add_skills = st.multiselect("Skills", options=skill_options, key="add_staff_skills")
             
             st.write("---")
             cc1, cc2 = st.columns(2)
             with cc1:
-                add_night = st.toggle("Allow Night Shifts", value=True)
+                add_night = st.toggle("Allow Night Shifts", value=True, key="add_staff_night")
             with cc2:
-                add_consec = st.number_input("Max Consecutive Days", min_value=1, max_value=14, value=6)
+                add_consec = st.number_input("Max Consecutive Days", min_value=1, max_value=14, value=6, key="add_staff_consec")
                 
             if st.form_submit_button("Add Personnel", use_container_width=True):
                 if add_name and add_id:
@@ -1031,6 +1051,11 @@ def render_manage_staffs():
                             for s in updated_staff: s['id'] = s['employee_id']
                             st.session_state.nurses = updated_staff
                             notify("Employee Added", f"{add_name} added successfully.")
+                            
+                            # Clear form keys
+                            reset_form_keys(["add_staff_name", "add_staff_id", "add_staff_grade", 
+                                           "add_staff_dept", "add_staff_skills", "add_staff_night", 
+                                           "add_staff_consec"])
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error adding staff: {e}")
@@ -1178,12 +1203,12 @@ def render_manage_skills():
         with st.form("add_skill_form", clear_on_submit=True):
             col1, col2 = st.columns([1, 3])
             with col1:
-                new_skill_code = st.text_input("Code", max_chars=5, help="e.g., ICU, ER")
+                new_skill_code = st.text_input("Code", max_chars=5, help="e.g., ICU, ER", key="new_skill_code")
             with col2:
-                new_skill_name = st.text_input("Name", help="e.g., ICU Care")
+                new_skill_name = st.text_input("Name", help="e.g., ICU Care", key="new_skill_name")
             
-            new_skill_desc = st.text_area("Description", help="Brief description")
-            new_skill_color = st.color_picker("Color", "#F0F4F8")
+            new_skill_desc = st.text_area("Description", help="Brief description", key="new_skill_desc")
+            new_skill_color = st.color_picker("Color", "#F0F4F8", key="new_skill_color")
 
             if st.form_submit_button("Add Skill", use_container_width=True):
                 if new_skill_code and new_skill_name:
@@ -1202,6 +1227,9 @@ def render_manage_skills():
                         st.session_state.skills.sort(key=lambda x: x['code'].upper())
                         save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
                         notify("Skill added successfully:", detail=f"{new_skill_code} - {new_skill_name}")
+                        
+                        # Clear form keys
+                        reset_form_keys(["new_skill_code", "new_skill_name", "new_skill_desc", "new_skill_color"])
                         st.rerun()
                 else:
                     notify("Action Failed", detail="Code and Name are required.", type="warning")
@@ -1339,9 +1367,9 @@ def render_manage_departments():
         with st.form("add_department_form", clear_on_submit=True):
             col1, col2 = st.columns([1, 2])
             with col1:
-                new_dept_id = st.text_input("Department ID", help="e.g., ICU, ER, CARD")
+                new_dept_id = st.text_input("Department ID", help="e.g., ICU, ER, CARD", key="new_dept_id")
             with col2:
-                new_dept_name = st.text_input("Department Name", help="e.g., ICU, Emergency, Cardiology")
+                new_dept_name = st.text_input("Department Name", help="e.g., ICU, Emergency, Cardiology", key="new_dept_name")
 
             if st.form_submit_button("Add Department", use_container_width=True):
                 if new_dept_id and new_dept_name:
@@ -1361,6 +1389,9 @@ def render_manage_departments():
                         st.session_state.departments.sort(key=lambda x: x['name'].upper())
                         save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
                         notify("Department added successfully:", detail=f"[{new_dept_id}] {new_dept_name} created")
+                        
+                        # Clear form keys
+                        reset_form_keys(["new_dept_id", "new_dept_name"])
                         st.rerun()
                 else:
                     notify("Action Failed", detail="ID and Name are required.", type="warning")
