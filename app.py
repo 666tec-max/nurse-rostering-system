@@ -1691,7 +1691,8 @@ with st.sidebar:
     with st.expander("⚙️ General Settings", expanded=False):
         st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
         st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
-        st.button("ℹ️ Constraints & Rules", on_click=lambda: st.session_state.update(current_page='Constraints & Rules'), use_container_width=True)
+        st.button("ℹ️ Hard Constraints", on_click=lambda: st.session_state.update(current_page='Hard Constraints'), use_container_width=True)
+        st.button("⚖️ Soft Constraints", on_click=lambda: st.session_state.update(current_page='Soft Constraints'), use_container_width=True)
 
     with st.expander("🔐 Admin Database", expanded=False):
         st.button("🏢 Manage Departments", on_click=lambda: st.session_state.update(current_page='Manage Departments'), use_container_width=True)
@@ -1792,33 +1793,64 @@ elif st.session_state.current_page == 'Minimum Demand':
     st.header("Minimum Demand")
     render_manage_demand()
 
-elif st.session_state.current_page == 'Constraints & Rules':
-    st.header("Constraints & Rules")
-    st.write("Overview of the scheduling constraints and optimization objectives used by the solver.")
+elif st.session_state.current_page == 'Hard Constraints':
+    st.header("🛡️ Hard Constraints")
+    st.write("These rules are **always** enforced — the solver will never violate them. If a solution is found, you can be 100% sure these rules were respected.")
 
     st.markdown('''
-    These rules are **always** enforced — the solver will never violate them.
+### 🚫 Strict Work Rules
+- **Max 1 Shift/Day:** No nurse works more than 1 shift per day.
+- **Max 6 Shifts/Week:** No nurse works more than 6 days in any 7-day rolling window.
+- **Max 7 Consecutive Days:** No nurse works more than 7 days in a row.
+- **Leave Compliance:** Nurses on leave are not assigned.
 
-    - **Max 1 Shift/Day:** No nurse works more than 1 shift per day.
-    - **Max 6 Shifts/Week:** No nurse works more than 6 days in a 7-day week.
-    - **Max 6 Consecutive Days:** No nurse works more than 6 days in a row.
-    - **Night Shift Recovery:**
-        - Max 4 consecutive night shifts.
-        - 1 Night → 1 Day Off
-        - 2-3 Nights → 2 Days Off
-        - 4 Nights → 3 Days Off
-    - **Leave Compliance:** Nurses on leave are not assigned.
+### 🌙 Night Shift Recovery
+The system enforces strict recovery periods after working night shifts to ensure staff well-being:
+- **Max 4 consecutive night shifts.**
+- **1 Night** → 1 Day Off
+- **2-3 Nights** → 2 Days Off
+- **4 Nights** → 3 Days Off
     ''')
 
-    st.subheader("🎯 Soft Objectives (Optimized)")
-    st.markdown('''
-    These goals are **optimized** — the solver tries its best to achieve them without violating hard rules.
+elif st.session_state.current_page == 'Soft Constraints':
+    st.header("⚖️ Soft Constraints (Scheduling Priorities)")
+    st.write("Adjust the priorities below to guide the optimization. These are goals the solver tries to achieve while respecting all Hard Constraints.")
+    
+    with st.container(border=True):
+        st.subheader("🎯 Optimization Weights")
+        st.write("Higher values give more priority to each goal. Use these to balance workload and utilization.")
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        col_w1, col_w2 = st.columns(2)
+        with col_w1:
+            st.session_state.schedule_weights['utilization'] = st.slider(
+                "📈 **Maximize Utilization**", 1, 10, st.session_state.schedule_weights.get('utilization', 10),
+                help="Assign extra nurses to shifts beyond minimums if capacity allows.",
+                key="soft_wt_util"
+            )
+            st.session_state.schedule_weights['overall_fairness'] = st.slider(
+                "⚖️ **Overall Fairness**", 1, 10, st.session_state.schedule_weights.get('overall_fairness', 5),
+                help="Balance total number of shifts among all staff.",
+                key="soft_wt_fair"
+            )
+        with col_w2:
+            st.session_state.schedule_weights['night_fairness'] = st.slider(
+                "🌙 **Night Shift Fairness**", 1, 10, st.session_state.schedule_weights.get('night_fairness', 5),
+                help="Distribute night shifts as evenly as possible.",
+                key="soft_wt_night"
+            )
+            st.session_state.schedule_weights['weekend_fairness'] = st.slider(
+                "🗓️ **Weekend Fairness**", 1, 10, st.session_state.schedule_weights.get('weekend_fairness', 5),
+                help="Distribute Saturday/Sunday shifts evenly.",
+                key="soft_wt_weekend"
+            )
+        
+        if st.button("💾 Save Priority Settings", type="primary", use_container_width=True):
+            notify("Settings Saved", detail="Scheduling priorities have been updated and will be used for the next generation.")
+            # Weights are already in session_state via the keys, but we ensure they persist if needed.
+            st.rerun()
 
-    - **Maximize Utilization:** Assign extra nurses to shifts beyond minimums if capacity allows.
-    - **Overall Fairness:** Balance total shifts among all nurses.
-    - **Night Shift Fairness:** Distribute night shifts as evenly as possible.
-    - **Weekend Fairness:** Distribute Saturday/Sunday shifts evenly.
-    ''')
+    st.info("💡 **Tip:** If you care most about staff satisfaction, increase the Fairness weights. If you have a high patient load, increase the Utilization weight.")
 
 
 elif st.session_state.current_page == 'Generate Schedule':
@@ -1877,28 +1909,9 @@ elif st.session_state.current_page == 'Generate Schedule':
 
     st.caption(f"**{len(dept_nurses)}** staff in **{selected_dept_name}**")
 
-    # --- Scheduling Priorities (Weights) ---
-    with st.expander("⚖️ Scheduling Priorities (Weights)", expanded=True):
-        st.write("Higher values give more priority to each goal.")
-        
-        col_w1, col_w2 = st.columns(2)
-        with col_w1:
-            w_util = st.slider("Maximize Utilization", 1, 10, st.session_state.schedule_weights.get('utilization', 10), 
-                             help="Assign extra nurses to shifts beyond minimums if capacity allows.")
-            w_fair = st.slider("Overall Fairness", 1, 10, st.session_state.schedule_weights.get('overall_fairness', 5),
-                             help="Balance total number of shifts among all staff.")
-        with col_w2:
-            w_night = st.slider("Night Shift Fairness", 1, 10, st.session_state.schedule_weights.get('night_fairness', 5),
-                              help="Distribute night shifts as evenly as possible.")
-            w_weekend = st.slider("Weekend Fairness", 1, 10, st.session_state.schedule_weights.get('weekend_fairness', 5),
-                                help="Distribute Saturday/Sunday shifts evenly.")
-        
-        current_weights = {
-            'utilization': w_util,
-            'overall_fairness': w_fair,
-            'night_fairness': w_night,
-            'weekend_fairness': w_weekend
-        }
+    # --- Current Priorities Preview ---
+    st.caption(f"🎯 **Priorities:** Util: {st.session_state.schedule_weights['utilization']} | Fair: {st.session_state.schedule_weights['overall_fairness']} | Night: {st.session_state.schedule_weights['night_fairness']} | Weekend: {st.session_state.schedule_weights['weekend_fairness']}")
+    st.caption("Adjust these in **General Settings > Soft Constraints**.")
 
     if st.button("Generate Optimized Schedule", type="primary"):
         if not dept_nurses:
@@ -1939,7 +1952,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                     grade_hierarchy=st.session_state.grades,
                     start_date=st.session_state.roster_start_date,
                     locked_assignments=model_locked_assignments,
-                    weights=current_weights
+                    weights=st.session_state.schedule_weights
                 )
             except TypeError as te:
                 st.error(f"Initialization Error: {te}")

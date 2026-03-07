@@ -65,14 +65,8 @@ class NurseRosteringModel:
             for d in range(self.num_days - 4):
                 self.model.Add(sum(is_night[d + k] for k in range(5)) <= 4)
                 
-            # 3b. Recovery Rules
-            # Rule 1: No Day shift immediately after Night shift (Basic Recovery)
-            for d in range(self.num_days - 1):
-                self.model.Add(
-                    sum(self.x[(n, d + 1, s)] for s in self.day_shifts) == 0
-                ).OnlyEnforceIf(is_night[d])
-            
-            # Count consecutive nights
+            # 3b. Night Block Tracking
+            # consec_nights[d] is the number of consecutive nights worked up to day d
             consec_nights = [self.model.NewIntVar(0, 4, f'consec_nights_n{n}_d{d}') for d in range(self.num_days)]
             
             for d in range(self.num_days):
@@ -82,28 +76,43 @@ class NurseRosteringModel:
                     self.model.Add(consec_nights[d] == consec_nights[d-1] + 1).OnlyEnforceIf(is_night[d])
                     self.model.Add(consec_nights[d] == 0).OnlyEnforceIf(is_night[d].Not())
 
-            # Enforce extended recovery days
+            # 3c. Recovery Rules (Triggered at the end of a night block)
             for d in range(self.num_days - 1):
+                # is_end_of_block is true if d is a night shift and d+1 is NOT a night shift
                 is_end_of_block = self.model.NewBoolVar(f'end_block_n{n}_d{d}')
                 self.model.AddBoolAnd([is_night[d], is_night[d+1].Not()]).OnlyEnforceIf(is_end_of_block)
                 self.model.AddBoolOr([is_night[d].Not(), is_night[d+1]]).OnlyEnforceIf(is_end_of_block.Not())
                 
-                # Rule 2: 2-3 nights -> 2 days off
+                # Rule 0: No work ANY shift immediately after any night shift block ends (1 Day Off minimum)
+                # This covers "1 Night -> 1 Day Off" or any block end
+                if d + 1 < self.num_days:
+                    for s in self.shifts:
+                        self.model.Add(self.x[(n, d+1, s)] == 0).OnlyEnforceIf(is_end_of_block)
+
+                # Rule 1: 2-3 nights -> 2 days off (d+1 and d+2 must be off)
                 if d + 2 < self.num_days:
                     trigger_2off = self.model.NewBoolVar(f'trigger_2off_n{n}_d{d}')
-                    self.model.Add(consec_nights[d] >= 2).OnlyEnforceIf(trigger_2off)
-                    self.model.Add(consec_nights[d] < 2).OnlyEnforceIf(trigger_2off.Not())
+                    # Trigger if end of block AND worked 2 or 3 nights
+                    self.model.AddBoolAnd([is_end_of_block]).OnlyEnforceIf(trigger_2off) # Simplified: trigger_2off is basically end_block with count check
+                    
+                    # More precise trigger: (consec_nights[d] == 2 OR 3) AND end_block
+                    # Actually easier to use OnlyEnforceIf with multiple literals
+                    count_2_or_3 = self.model.NewBoolVar(f'c23_n{n}_d{d}')
+                    self.model.AddLinearExpressionInDomain(consec_nights[d], cp_model.Domain.FromValues([2, 3])).OnlyEnforceIf(count_2_or_3)
+                    self.model.AddLinearExpressionInDomain(consec_nights[d], cp_model.Domain.FromValues([0, 1, 4])).OnlyEnforceIf(count_2_or_3.Not())
+                    
                     for s in self.shifts:
-                        self.model.Add(self.x[(n, d+2, s)] == 0).OnlyEnforceIf([is_end_of_block, trigger_2off])
+                        self.model.Add(self.x[(n, d+2, s)] == 0).OnlyEnforceIf([is_end_of_block, count_2_or_3])
 
-                # Rule 3: 4 nights -> 3 days off
+                # Rule 2: 4 nights -> 3 days off (d+1, d+2, d+3 must be off)
                 if d + 3 < self.num_days:
-                    trigger_3off = self.model.NewBoolVar(f'trigger_3off_n{n}_d{d}')
-                    self.model.Add(consec_nights[d] == 4).OnlyEnforceIf(trigger_3off)
-                    self.model.Add(consec_nights[d] != 4).OnlyEnforceIf(trigger_3off.Not())
+                    count_4 = self.model.NewBoolVar(f'c4_n{n}_d{d}')
+                    self.model.Add(consec_nights[d] == 4).OnlyEnforceIf(count_4)
+                    self.model.Add(consec_nights[d] != 4).OnlyEnforceIf(count_4.Not())
+                    
                     for s in self.shifts:
-                        self.model.Add(self.x[(n, d+2, s)] == 0).OnlyEnforceIf([is_end_of_block, trigger_3off])
-                        self.model.Add(self.x[(n, d+3, s)] == 0).OnlyEnforceIf([is_end_of_block, trigger_3off])
+                        self.model.Add(self.x[(n, d+2, s)] == 0).OnlyEnforceIf([is_end_of_block, count_4])
+                        self.model.Add(self.x[(n, d+3, s)] == 0).OnlyEnforceIf([is_end_of_block, count_4])
 
     def build_model(self):
         """Initialize the CP-SAT model and decision variables."""
@@ -161,25 +170,23 @@ class NurseRosteringModel:
         if self.night_shifts:
             self._add_night_recovery_constraints()
 
-        # 4. Max 6 working days per week (Static 7-day blocks)
+        # 4. Max 6 working days per week (Sliding window of 7 days)
         for n in range(self.num_nurses):
-            for w in range(0, self.num_days, 7):
-                week_days = range(w, min(w + 7, self.num_days))
-                # Sum of all shifts for this nurse in this week
+            # Rolling 7-day window: in any 7-day period, at most 6 working days
+            for start_day in range(self.num_days - 6):
+                week_window = range(start_day, start_day + 7)
                 self.model.Add(
                     sum(
                         self.x[(n, d, s)] 
-                        for d in week_days 
+                        for d in week_window 
                         for s in self.shifts
                     ) <= 6
                 )
 
-        # 4b. Per-nurse Max consecutive working days (Sliding window)
+        # 4b. Per-nurse Max consecutive working days (Max 7 as default)
         for n_idx, nurse in enumerate(self.nurses):
-            limit = nurse.get('max_consecutive_work_days', 6)
-            # Window size = limit + 1
-            # In any window of (limit + 1) days, the nurse can work at most 'limit' days.
-            # This ensures that after working 'limit' days in a row, the next day MUST be OFF.
+            limit = nurse.get('max_consecutive_work_days', 7)
+            # Sliding window to enforce limit consecutive days
             for start_day in range(self.num_days - limit):
                 window_days = range(start_day, start_day + limit + 1)
                 self.model.Add(
