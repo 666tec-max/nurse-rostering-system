@@ -1,7 +1,7 @@
 from ortools.sat.python import cp_model
 
 class NurseRosteringModel:
-    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None, start_date=None, locked_assignments=None):
+    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None, start_date=None, locked_assignments=None, weights=None):
         """
         Initialize the Nurse Rostering Model.
         
@@ -14,6 +14,7 @@ class NurseRosteringModel:
             grade_hierarchy (list): List of lists representing grade ranks.
             start_date (date): The starting date of the roster (to identify weekends).
             locked_assignments (dict): Dictionary mapping (nurse_idx, day_idx) to shift_code or '-'.
+            weights (dict): Dictionary of weights for the objective function.
         """
         self.num_nurses = num_nurses
         self.num_days = num_days
@@ -22,6 +23,12 @@ class NurseRosteringModel:
         self.grade_hierarchy = grade_hierarchy
         self.start_date = start_date
         self.locked_assignments = locked_assignments or {}
+        self.weights = weights or {
+            'utilization': 10,
+            'overall_fairness': 5,
+            'night_fairness': 5,
+            'weekend_fairness': 5
+        }
         
         # Parse shifts configuration
         if shifts_config:
@@ -258,15 +265,13 @@ class NurseRosteringModel:
                     # Enforce OFF day
                     for s in self.shifts:
                         self.model.Add(self.x[(n_idx, d_idx, s)] == 0)
-                elif shift_code in self.shifts:
-                    # Enforce specific shift
                     self.model.Add(self.x[(n_idx, d_idx, shift_code)] == 1)
 
     def solve_model(self):
-        """Solve the model using lexicographic objectives: maximize utilization, then minimize deviations."""
+        """Solve the model using a single weighted objective function."""
         self.solver = cp_model.CpSolver()
         
-        # --- Step 1: Define variables ---
+        # --- 1. Utilization: Total Assignments ---
         nurse_total_shifts = []
         for n in range(self.num_nurses):
             total_shifts = self.model.NewIntVar(0, self.num_days, f'total_shifts_n{n}')
@@ -278,49 +283,32 @@ class NurseRosteringModel:
         total_assignments = self.model.NewIntVar(0, self.num_nurses * self.num_days, 'total_assignments')
         self.model.Add(total_assignments == sum(nurse_total_shifts))
         
-        # --- Step 2: Define deviations for fairness ---
+        # --- 2. Overall Fairness: Deviations ---
         deviations = []
         N = self.num_nurses
         max_dev = N * self.num_days
         
         for n in range(self.num_nurses):
             dev = self.model.NewIntVar(0, max_dev, f'dev_n{n}')
+            # We want to minimize |N * total_shifts[n] - total_assignments|
+            # Scaling by N allows us to use integer arithmetic instead of average (total/N)
             self.model.Add(dev >= (N * nurse_total_shifts[n]) - total_assignments)
             self.model.Add(dev >= total_assignments - (N * nurse_total_shifts[n]))
             deviations.append(dev)
+            
+        sum_deviations = self.model.NewIntVar(0, N * max_dev, 'sum_deviations')
+        self.model.Add(sum_deviations == sum(deviations))
         
-        # --- Step 3: Define Night Shifts Per Nurse ---
+        # --- 3. Night Fairness: Night Shift Difference ---
         night_shifts_per_nurse = []
         for n in range(self.num_nurses):
             ns = self.model.NewIntVar(0, self.num_days, f'night_shifts_n{n}')
-            # Count night shifts if any are defined
             if self.night_shifts:
                 self.model.Add(ns == sum(self.x[(n, d, s)] for d in range(self.num_days) for s in self.night_shifts))
             else:
                 self.model.Add(ns == 0)
             night_shifts_per_nurse.append(ns)
-
-        # --- Step 4: Step 1 – Maximize utilization ---
-        self.model.Maximize(total_assignments)
-        status1 = self.solver.Solve(self.model)
-        
-        if status1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            return status1  # No feasible solution
-        
-        # Fix utilization for next steps
-        self.model.Add(total_assignments == int(self.solver.Value(total_assignments)))
-        
-        # --- Step 5: Step 2 – Minimize overall deviations (General Fairness) ---
-        self.model.Minimize(sum(deviations))
-        status2 = self.solver.Solve(self.model)
-        
-        if status2 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            return status2
             
-        # Fix general fairness for last step
-        self.model.Add(sum(deviations) == int(self.solver.Value(sum(deviations))))
-        
-        # --- Step 6: Step 3 – Minimize night shift difference (Night Fairness) ---
         min_nights = self.model.NewIntVar(0, self.num_days, 'min_nights')
         max_nights = self.model.NewIntVar(0, self.num_days, 'max_nights')
         self.model.AddMinEquality(min_nights, night_shifts_per_nurse)
@@ -329,16 +317,7 @@ class NurseRosteringModel:
         night_diff = self.model.NewIntVar(0, self.num_days, 'night_diff')
         self.model.Add(night_diff == max_nights - min_nights)
         
-        self.model.Minimize(night_diff)
-        status3 = self.solver.Solve(self.model)
-        
-        if status3 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            return status3
-            
-        # Fix night fairness for last step
-        self.model.Add(night_diff == int(self.solver.Value(night_diff)))
-        
-        # --- Step 7: Step 4 – Minimize weekend shift difference (Weekend Fairness) ---
+        # --- 4. Weekend Fairness: Weekend Shift Difference ---
         weekend_shifts_per_nurse = []
         weekend_indices = []
         if self.start_date:
@@ -364,11 +343,27 @@ class NurseRosteringModel:
         weekend_diff = self.model.NewIntVar(0, self.num_days, 'weekend_diff')
         self.model.Add(weekend_diff == max_weekends - min_weekends)
         
-        self.model.Minimize(weekend_diff)
+        # --- 5. Form Weighted Objective ---
+        # Weights are 1-10.
+        # Utilization is MAXIMIZED. Fairness (deviations/diffs) are MINIMIZED (weighted subtraction).
+        w_util = self.weights.get('utilization', 10)
+        w_fair = self.weights.get('overall_fairness', 5)
+        w_night = self.weights.get('night_fairness', 5)
+        w_weekend = self.weights.get('weekend_fairness', 5)
         
-        # Final Solve
-        status4 = self.solver.Solve(self.model)
-        return status4
+        # Scale utilization significantly higher to ensure filling shifts is still the top priority
+        # unless user explicitly sets it low. 
+        # Fairness values should not override the need for a feasible, highly-utilized roster.
+        objective = (w_util * 100 * total_assignments) - \
+                    (w_fair * sum_deviations) - \
+                    (w_night * 10 * night_diff) - \
+                    (w_weekend * 10 * weekend_diff)
+        
+        self.model.Maximize(objective)
+        
+        # Solve
+        status = self.solver.Solve(self.model)
+        return status
     
     def extract_solution(self, status):
         """Extract the schedule if a solution exists."""

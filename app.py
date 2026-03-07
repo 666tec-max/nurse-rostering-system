@@ -433,6 +433,14 @@ if 'demand' not in st.session_state:
             else: total = 1
             st.session_state.demand["default"][s['code']] = {"Total": total}
 
+if 'schedule_weights' not in st.session_state:
+    st.session_state.schedule_weights = {
+        'utilization': 10,
+        'overall_fairness': 5,
+        'night_fairness': 5,
+        'weekend_fairness': 5
+    }
+
 # ---------------------------------------------------------------------
 # Dialog Modals
 # ---------------------------------------------------------------------
@@ -1862,6 +1870,29 @@ elif st.session_state.current_page == 'Generate Schedule':
 
     st.caption(f"**{len(dept_nurses)}** staff in **{selected_dept_name}**")
 
+    # --- Scheduling Priorities (Weights) ---
+    with st.expander("⚖️ Scheduling Priorities (Weights)", expanded=True):
+        st.write("Higher values give more priority to each goal.")
+        
+        col_w1, col_w2 = st.columns(2)
+        with col_w1:
+            w_util = st.slider("Maximize Utilization", 1, 10, st.session_state.schedule_weights.get('utilization', 10), 
+                             help="Assign extra nurses to shifts beyond minimums if capacity allows.")
+            w_fair = st.slider("Overall Fairness", 1, 10, st.session_state.schedule_weights.get('overall_fairness', 5),
+                             help="Balance total number of shifts among all staff.")
+        with col_w2:
+            w_night = st.slider("Night Shift Fairness", 1, 10, st.session_state.schedule_weights.get('night_fairness', 5),
+                              help="Distribute night shifts as evenly as possible.")
+            w_weekend = st.slider("Weekend Fairness", 1, 10, st.session_state.schedule_weights.get('weekend_fairness', 5),
+                                help="Distribute Saturday/Sunday shifts evenly.")
+        
+        current_weights = {
+            'utilization': w_util,
+            'overall_fairness': w_fair,
+            'night_fairness': w_night,
+            'weekend_fairness': w_weekend
+        }
+
     if st.button("Generate Optimized Schedule", type="primary"):
         if not dept_nurses:
             notify("Generation Failed", detail=f"No staff assigned to '{selected_dept_name}'. Add staff to this department first.", type="error")
@@ -1900,7 +1931,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                     shifts_config=st.session_state.shifts,
                     grade_hierarchy=st.session_state.grades,
                     start_date=st.session_state.roster_start_date,
-                    locked_assignments=model_locked_assignments
+                    locked_assignments=model_locked_assignments,
+                    weights=current_weights
                 )
             except TypeError as te:
                 st.error(f"Initialization Error: {te}")
@@ -1912,6 +1944,14 @@ elif st.session_state.current_page == 'Generate Schedule':
                 model.build_model()
                 model.add_constraints()
                 status = model.solve_model()
+                
+                # Update persistent weights from current UI state
+                st.session_state.schedule_weights = {
+                    'utilization': w_util,
+                    'overall_fairness': w_fair,
+                    'night_fairness': w_night,
+                    'weekend_fairness': w_weekend
+                }
                 
                 from ortools.sat.python import cp_model
                 if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
