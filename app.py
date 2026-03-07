@@ -1690,7 +1690,6 @@ with st.sidebar:
 
     with st.expander("⚙️ General Settings", expanded=False):
         st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
-        st.button("📅 Date Range", on_click=lambda: st.session_state.update(current_page='Date Range'), use_container_width=True)
         st.button("ℹ️ Hard Constraints", on_click=lambda: st.session_state.update(current_page='Hard Constraints'), use_container_width=True)
         st.button("⚖️ Soft Constraints", on_click=lambda: st.session_state.update(current_page='Soft Constraints'), use_container_width=True)
 
@@ -1733,39 +1732,6 @@ if st.session_state.current_page == 'Theme':
 
     st.caption(f"Current theme: **{st.session_state.theme}**")
 
-elif st.session_state.current_page == 'Date Range':
-    st.header("Select Roster Date Range")
-    st.write("Pick **two dates** on the calendar below. The earlier date becomes the **start** and the later date becomes the **end** of your roster.")
-
-    selected_range = st.date_input(
-        "Roster period",
-        value=(st.session_state.roster_start_date, st.session_state.roster_end_date),
-        min_value=today,
-        max_value=date(today.year + 10, today.month, today.day),
-        format="YYYY-MM-DD",
-        key="date_range_picker"
-    )
-
-    if isinstance(selected_range, tuple) and len(selected_range) == 2:
-        start_date, end_date = selected_range
-        if start_date > end_date:
-            start_date, end_date = end_date, start_date
-
-        num_days = (end_date - start_date).days + 1
-        # Range preview is fine as info/success since it's not a final "action" result, 
-        # but let's make the Apply button use notify.
-        st.info(f"**Selected range:** {start_date.strftime('%a, %b %d, %Y')} → {end_date.strftime('%a, %b %d, %Y')}  ({num_days} days)")
-
-        if st.button("✅ Apply Date Range", type="primary"):
-            st.session_state.roster_start_date = start_date
-            st.session_state.roster_end_date = end_date
-            # Reset demand table so it rebuilds for the new date range
-            if 'shift_reqs_df' in st.session_state:
-                del st.session_state['shift_reqs_df']
-            notify("Date range applied:", detail=f"{start_date.strftime('%b %d')} → {end_date.strftime('%b %d')} ({num_days} days)")
-            st.rerun()
-    else:
-        st.info("Please select both a **start** and **end** date.")
 
 elif st.session_state.current_page == 'Manage Shifts':
     render_manage_shifts()
@@ -1855,16 +1821,62 @@ elif st.session_state.current_page == 'Soft Constraints':
 
 elif st.session_state.current_page == 'Generate Schedule':
     st.header("Schedule Generation")
-    st.info("The solver will prioritize filling extra shifts (utilization) while keeping the workload balanced (fairness).")
+    
+    # --- Selection & Period Row ---
+    with st.container(border=True):
+        col_gen1, col_gen2 = st.columns([1, 1])
+        
+        with col_gen1:
+            # --- Department Selector ---
+            def on_dept_change():
+                st.session_state.last_schedule = None
+                st.session_state.last_stats = None
+                st.session_state.locked_assignments = {}
 
-    # --- Automated Roster Loading ---
-    # When a department is selected, check if a roster already exists for this range.
-    # We only auto-load if last_schedule is None (e.g., initial page load or after department change)
+            dept_names = [d['name'] for d in st.session_state.departments]
+            dept_ids = [d['id'] for d in st.session_state.departments]
+            if dept_names:
+                selected_dept_idx = st.selectbox(
+                    "🏥 Select Department", 
+                    range(len(dept_names)), 
+                    format_func=lambda i: dept_names[i], 
+                    key="schedule_dept_select",
+                    on_change=on_dept_change
+                )
+                selected_dept_id = dept_ids[selected_dept_idx]
+                selected_dept_name = dept_names[selected_dept_idx]
+            else:
+                selected_dept_id = None
+                selected_dept_name = "All"
+                st.info("No departments defined.")
+
+        with col_gen2:
+            # --- Date Range Picker ---
+            def on_date_change():
+                # If date changes, reset roster to trigger a new auto-load or allow fresh gen
+                st.session_state.last_schedule = None
+                st.session_state.last_stats = None
+                st.session_state.locked_assignments = {}
+                if 'shift_reqs_df' in st.session_state:
+                    del st.session_state['shift_reqs_df']
+
+            selected_range = st.date_input(
+                "📅 Roster Period",
+                value=(st.session_state.roster_start_date, st.session_state.roster_end_date),
+                min_value=today,
+                max_value=date(today.today().year + 1, 12, 31),
+                format="YYYY-MM-DD",
+                key="gen_date_picker",
+                on_change=on_date_change
+            )
+            
+            if isinstance(selected_range, tuple) and len(selected_range) == 2:
+                st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
+            
+    # --- Automated Roster Loading (Fix: defined after selected_dept_id) ---
     if selected_dept_id:
-        # Check if we need to auto-load (e.g., if the user hasn't generated anything yet this session)
         if st.session_state.get('last_schedule') is None:
             try:
-                # Fetch newest roster for this department and same date range
                 res = supabase.table("rosters").select("*") \
                     .eq("department_id", selected_dept_id) \
                     .eq("start_date", st.session_state.roster_start_date.strftime("%Y-%m-%d")) \
@@ -1876,7 +1888,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                 if res.data:
                     latest = res.data[0]
                     st.session_state.last_schedule = latest['schedule_data']
-                    st.session_state.last_stats = None # Will be recalculated on render or re-gen
+                    st.session_state.last_stats = None 
                     st.session_state.locked_assignments = {}
                     notify("Roster Auto-Loaded", detail=f"Fetched the latest saved roster for **{selected_dept_name}**.", type="success")
                     st.rerun()
@@ -1890,36 +1902,13 @@ elif st.session_state.current_page == 'Generate Schedule':
     if 'locked_assignments' not in st.session_state:
         st.session_state.locked_assignments = {}
 
-    # --- Department Selector ---
-    def on_dept_change():
-        st.session_state.last_schedule = None
-        st.session_state.last_stats = None
-        st.session_state.locked_assignments = {}
-
-    dept_names = [d['name'] for d in st.session_state.departments]
-    dept_ids = [d['id'] for d in st.session_state.departments]
-    if dept_names:
-        selected_dept_idx = st.selectbox(
-            "Select Department", 
-            range(len(dept_names)), 
-            format_func=lambda i: dept_names[i], 
-            key="schedule_dept_select",
-            on_change=on_dept_change
-        )
-        selected_dept_id = dept_ids[selected_dept_idx]
-        selected_dept_name = dept_names[selected_dept_idx]
-    else:
-        selected_dept_id = None
-        selected_dept_name = "All"
-        st.info("No departments defined. Scheduling all staff.")
-
     # Filter nurses by selected department
     if selected_dept_id:
         dept_nurses = [n for n in st.session_state.nurses if n.get('department_id') == selected_dept_id]
     else:
         dept_nurses = list(st.session_state.nurses)
 
-    st.caption(f"**{len(dept_nurses)}** staff in **{selected_dept_name}**")
+    st.caption(f"👥 **{len(dept_nurses)}** staff available in **{selected_dept_name}**")
 
     # --- Priority Balance Visualization ---
     with st.container(border=True):
