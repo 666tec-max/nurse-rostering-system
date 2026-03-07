@@ -379,7 +379,7 @@ if 'skills' not in st.session_state:
     st.session_state.skills.sort(key=lambda x: x['code'].upper())
 
 if 'nurses' not in st.session_state:
-    raw_staff = fetch_all_staff(supabase)
+    raw_staff = staff_db.fetch_all_staff(supabase)
     if not raw_staff:
         # Fallback to JSON or defaults if Supabase is empty
         raw_staff = load_data("nurses", NURSE_DATA_FILE, [
