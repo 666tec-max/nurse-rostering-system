@@ -1820,66 +1820,66 @@ elif st.session_state.current_page == 'Soft Constraints':
 
 
 elif st.session_state.current_page == 'Generate Schedule':
-    st.header("Schedule Generation")
+    st.header("Generate Schedule")
     
-    # --- Local Date Sync ---
+    # --- 0. Local Date & Data Sync ---
     roster_start = st.session_state.roster_start_date
     roster_end = st.session_state.roster_end_date
     planning_horizon = (roster_end - roster_start).days + 1
     date_labels = [(roster_start + timedelta(days=d)).strftime("%a, %b %d") for d in range(planning_horizon)]
-    
-    # --- Selection & Period Row ---
+
+    # --- 1. Schedule Setup Section (Top) ---
     with st.container(border=True):
-        col_gen1, col_gen2 = st.columns([1, 1])
+        st.subheader("🛠️ Schedule Setup")
+        col_s1, col_s2 = st.columns([1, 1])
         
-        with col_gen1:
-            # --- Department Selector ---
-            def on_dept_change():
-                st.session_state.last_schedule = None
-                st.session_state.last_stats = None
-                st.session_state.locked_assignments = {}
-
-            dept_names = [d['name'] for d in st.session_state.departments]
-            dept_ids = [d['id'] for d in st.session_state.departments]
-            if dept_names:
-                selected_dept_idx = st.selectbox(
-                    "🏥 Select Department", 
-                    range(len(dept_names)), 
-                    format_func=lambda i: dept_names[i], 
-                    key="schedule_dept_select",
-                    on_change=on_dept_change
-                )
-                selected_dept_id = dept_ids[selected_dept_idx]
-                selected_dept_name = dept_names[selected_dept_idx]
-            else:
-                selected_dept_id = None
-                selected_dept_name = "All"
-                st.info("No departments defined.")
-
-        with col_gen2:
-            # --- Date Range Picker ---
-            def on_date_change():
-                # If date changes, reset roster to trigger a new auto-load or allow fresh gen
-                st.session_state.last_schedule = None
-                st.session_state.last_stats = None
-                st.session_state.locked_assignments = {}
-                if 'shift_reqs_df' in st.session_state:
-                    del st.session_state['shift_reqs_df']
-
-            selected_range = st.date_input(
-                "📅 Roster Period",
-                value=(st.session_state.roster_start_date, st.session_state.roster_end_date),
-                min_value=today,
-                max_value=date(today.today().year + 1, 12, 31),
-                format="YYYY-MM-DD",
-                key="gen_date_picker",
-                on_change=on_date_change
+        with col_s1:
+            dept_options = {d['id']: d['name'] for d in st.session_state.departments}
+            selected_dept_id = st.selectbox(
+                "Select Department",
+                options=list(dept_options.keys()),
+                format_func=lambda x: dept_options[x],
+                key="gen_dept_selector"
             )
+            selected_dept_name = dept_options.get(selected_dept_id, "Unknown")
             
+            # Filter nurses for display metrics
+            dept_nurses = [n for n in st.session_state.nurses if n.get('department_id') == selected_dept_id]
+            st.info(f"👥 **{len(dept_nurses)}** Nurses | 📅 **{planning_horizon}** Days")
+
+        with col_s2:
+            selected_range = st.date_input(
+                "Roster Period",
+                value=(roster_start, roster_end),
+                min_value=date(2024, 1, 1),
+                max_value=date(2026, 12, 31),
+                key="gen_date_picker"
+            )
             if isinstance(selected_range, tuple) and len(selected_range) == 2:
-                st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
-            
-    # --- Automated Roster Loading ---
+                if selected_range[0] != roster_start or selected_range[1] != roster_end:
+                    st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
+                    st.session_state.last_schedule = None # Reset to trigger auto-load/fresh gen
+                    st.rerun()
+            st.write(f"**Selected Range:** {roster_start.strftime('%d %b')} – {roster_end.strftime('%d %b')}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        gen_btn = st.button("🚀 Generate Optimized Schedule", type="primary", use_container_width=True)
+
+    # --- 2. Scheduling Priorities Section ---
+    with st.expander("📝 Scheduling Priorities & Rules", expanded=False):
+        st.write("The algorithm optimizes for the following rules and constraints:")
+        p_col1, p_col2 = st.columns(2)
+        with p_col1:
+            st.checkbox("✅ Coverage requirements per day", value=True, disabled=True)
+            st.checkbox("✅ Fair shift distribution (Utilization)", value=True, disabled=True)
+            st.checkbox("✅ Night shift balancing", value=True, disabled=True)
+        with p_col2:
+            st.checkbox("✅ Weekend shift balancing", value=True, disabled=True)
+            st.checkbox("✅ Locked shifts respected", value=True, disabled=True)
+            st.checkbox("✅ Leave requests respected", value=True, disabled=True)
+        st.caption("💡 Adjust priority weights in **General Settings > Soft Constraints**.")
+
+    # --- 3. Automated Roster Loading ---
     def fetch_latest_roster(dept_id, start, end):
         try:
             res = supabase.table("rosters").select("*") \
@@ -1901,11 +1901,10 @@ elif st.session_state.current_page == 'Generate Schedule':
             st.error(f"Fetch failed: {e}")
             return False
 
-    if selected_dept_id:
-        if st.session_state.get('last_schedule') is None:
-            if fetch_latest_roster(selected_dept_id, roster_start, roster_end):
-                notify("Roster Auto-Loaded", detail=f"Fetched the latest saved roster for **{selected_dept_name}**.", type="success")
-                st.rerun()
+    if st.session_state.get('last_schedule') is None and selected_dept_id:
+        if fetch_latest_roster(selected_dept_id, roster_start, roster_end):
+            notify("Roster Auto-Loaded", detail=f"Fetched the latest saved roster for **{selected_dept_name}**.", type="success")
+            st.rerun()
 
     if 'last_schedule' not in st.session_state:
         st.session_state.last_schedule = None
@@ -1914,7 +1913,7 @@ elif st.session_state.current_page == 'Generate Schedule':
     if 'locked_assignments' not in st.session_state:
         st.session_state.locked_assignments = {}
 
-    # --- Sync Stats if Missing ---
+    # --- 4. Sync Stats if Missing ---
     if st.session_state.last_schedule and st.session_state.last_stats is None:
         try:
             stats = []
@@ -1946,43 +1945,38 @@ elif st.session_state.current_page == 'Generate Schedule':
             }
         except Exception as e:
             st.error(f"Stats sync error: {e}")
-
-    # Filter nurses by selected department
-    if selected_dept_id:
-        dept_nurses = [n for n in st.session_state.nurses if n.get('department_id') == selected_dept_id]
-    else:
-        dept_nurses = list(st.session_state.nurses)
-
-    st.caption(f"👥 **{len(dept_nurses)}** staff available in **{selected_dept_name}**")
-
-    # --- Priority Balance Visualization ---
-    with st.container(border=True):
-        col_pb1, col_pb2 = st.columns([1, 1])
-        with col_pb1:
-            st.markdown("### ⚖️ Optimization Priorities")
-            st.write("The solver balances these objectives based on values defined in **Soft Constraints**.")
-            if st.button("⚙️ Edit Priorities", use_container_width=True):
-                st.session_state.current_page = 'Soft Constraints'
-                st.rerun()
+            
+    # --- Automated Roster Loading ---
+    # --- 5. Roster Table & Control Buttons ---
+    if st.session_state.last_schedule:
+        st.markdown("---")
+        st.subheader("📅 Optimized Roster")
         
-        with col_pb2:
-            w = st.session_state.schedule_weights
-            st.caption(f"📈 Utilization (**{w['utilization']}**/10)")
-            st.progress(w['utilization'] / 10.0)
-            st.caption(f"⚖️ Overall Fairness (**{w['overall_fairness']}**/10)")
-            st.progress(w['overall_fairness'] / 10.0)
-            st.caption(f"🌙 Night Fairness (**{w['night_fairness']}**/10)")
-            st.progress(w['night_fairness'] / 10.0)
-            st.caption(f"🗓️ Weekend Fairness (**{w['weekend_fairness']}**/10)")
-            st.progress(w['weekend_fairness'] / 10.0)
-    
-    col_act1, col_act2 = st.columns([2, 1])
-    with col_act1:
-        gen_btn = st.button("Generate Optimized Schedule", type="primary", use_container_width=True)
-    with col_act2:
-        if st.button("🔄 Refresh Local Data", use_container_width=True):
-            st.session_state.last_schedule = None
-            st.rerun()
+        # --- 5.1 Table Controls ---
+        ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns(4)
+        
+        with ctrl_col1:
+            if st.button("🔄 Regenerate", use_container_width=True, help="Re-solve the model while keeping manual locks"):
+                gen_btn = True # Trigger generation logic below
+        
+        with ctrl_col2:
+            # Excel Export handled later in the script (usually at the end of the page)
+            pass 
+
+        with ctrl_col3:
+            if st.button("🧼 Reset Edits", use_container_width=True, help="Revert all manual changes since last generation"):
+                if fetch_latest_roster(selected_dept_id, roster_start, roster_end):
+                    notify("Edits Reset", "Reloaded the original generated roster.", type="info")
+                    st.rerun()
+
+        with ctrl_col4:
+            if st.button("🔓 Clear Locks", use_container_width=True, help="Unlock all manual assignments"):
+                st.session_state.locked_assignments = {}
+                notify("Locks cleared", "All cells unlocked. They can now be changed by the solver.", type="success")
+                st.rerun()
+
+        # Zoom & Painter handled inside the render block below
+        pass
 
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -2211,6 +2205,90 @@ elif st.session_state.current_page == 'Generate Schedule':
                     notify("Manual Change Saved Locally", detail="Cloud sync failed, change persists in session only.", type="warning")
                 
                 st.rerun()
+
+            # --- 6. Coverage Indicator ---
+            st.markdown("---")
+            st.subheader("📊 Coverage Indicator")
+            
+            # Pre-calculate coverage
+            coverage_data = []
+            for d_idx in range(planning_horizon):
+                target_date = roster_start + timedelta(days=d_idx)
+                date_str = target_date.strftime("%Y-%m-%d")
+                day_demand = st.session_state.demand["overrides"].get(date_str, st.session_state.demand["default"])
+                
+                required_total = sum(req.get("Total", 1) for s, req in day_demand.items() if s != 'OFF')
+                actual_total = sum(1 for n_name in nurse_names if schedule_data[n_name][d_idx] != '-')
+                
+                status = "Fully Staffed" if actual_total >= required_total else "Understaffed"
+                color = "green" if actual_total >= required_total else ("red" if actual_total < required_total * 0.7 else "orange")
+                coverage_data.append({"Date": date_labels[d_idx], "Req": required_total, "Act": actual_total, "Status": status, "Color": color})
+
+            # Display as a horizontal status row
+            cov_cols = st.columns(min(7, planning_horizon))
+            for i, data in enumerate(coverage_data):
+                with cov_cols[i % 7]:
+                    st.markdown(f"""
+                        <div style="background-color: {data['Color']}; color: white; padding: 4px; border-radius: 4px; text-align: center; font-size: 0.7rem; margin-bottom: 4px;">
+                            {data['Date']}<br><b>{data['Act']}/{data['Req']}</b>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+            # --- 7. Conflict Warnings ---
+            st.markdown("---")
+            st.subheader("⚠️ Conflict Warnings")
+            conflicts = []
+            night_codes = [s['code'] for s in st.session_state.shifts if s.get('type') == 'Night']
+            
+            for n_name in nurse_names:
+                shifts = schedule_data[n_name]
+                # Check Consecutive Nights
+                consecutive_nights = 0
+                for d_idx, s in enumerate(shifts):
+                    if s in night_codes:
+                        consecutive_nights += 1
+                        if consecutive_nights > 4:
+                            conflicts.append(f"🚩 **{n_name}**: Exceeds max 4 consecutive night shifts at {date_labels[d_idx]}")
+                    else:
+                        # Check Night Recovery
+                        if consecutive_nights > 0:
+                            needed_off = 1 if consecutive_nights == 1 else (2 if consecutive_nights <= 3 else 3)
+                            off_found = 0
+                            for next_d in range(d_idx, min(d_idx + needed_off, planning_horizon)):
+                                if shifts[next_d] == '-': off_found += 1
+                                else: break
+                            if off_found < needed_off:
+                                conflicts.append(f"🚩 **{n_name}**: Insufficient recovery ({off_found}/{needed_off} days) after {consecutive_nights} nights at {date_labels[d_idx-1]}")
+                        consecutive_nights = 0
+                
+                # Check Max 7 Consecutive Days
+                consecutive_days = 0
+                for d_idx, s in enumerate(shifts):
+                    if s != '-':
+                        consecutive_days += 1
+                        if consecutive_days > 7:
+                            conflicts.append(f"🚩 **{n_name}**: Exceeds max 7 consecutive working days at {date_labels[d_idx]}")
+                    else:
+                        consecutive_days = 0
+            
+            if conflicts:
+                for msg in conflicts[:10]: # Limit to 10 warnings
+                    st.warning(msg)
+                if len(conflicts) > 10:
+                    st.info(f"Showing 10 of {len(conflicts)} conflict warnings.")
+            else:
+                st.success("✅ No soft constraint violations detected in this roster.")
+
+            # --- 8. Fairness Analysis ---
+            st.markdown("---")
+            st.subheader("⚖️ Fairness Analysis")
+            if st.session_state.last_stats:
+                stat_df = st.session_state.last_stats['df']
+                st.dataframe(stat_df, hide_index=True, use_container_width=True)
+                
+                # Visualization
+                st.markdown("#### Shift Distribution")
+                st.bar_chart(stat_df.set_index('Nurse')['Total Shifts'])
                 
             # Excel Export
             output = io.BytesIO()
@@ -2246,18 +2324,9 @@ elif st.session_state.current_page == 'Generate Schedule':
                         notify("Save Failed", detail=str(e), type="error")
                         st.rerun()
             
-            if st.session_state.get('last_stats'):
-                st.markdown("### 📊 Key Statistics")
-                meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
-                meta_col1.metric("Total Assignments", st.session_state.last_stats['total'])
-                meta_col2.metric("Overall Fairness", st.session_state.last_stats['fairness'])
-                meta_col3.metric("Night Fairness", st.session_state.last_stats['night_fairness'])
-                meta_col4.metric("Weekend Fairness", st.session_state.last_stats['weekend_fairness'])
-                
-                st.info("🎯 **Optimization Priority:** 1. Utilization → 2. Overall Balance → 3. Night Balance → 4. Weekend Balance")
-                
-                with st.expander("Detailed Shift Counts per Nurse"):
-                    st.dataframe(st.session_state.last_stats['df'], use_container_width=True)
+            # Note: Save and Stats are already integrated into sections above.
+            # Roster is auto-saved on generation and edit.
+            
         except Exception as display_err:
             st.error(f"Display Error: {display_err}")
             st.button("Clear Saved Roster", on_click=lambda: st.session_state.update(last_schedule=None))

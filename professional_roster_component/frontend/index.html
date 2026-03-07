@@ -177,6 +177,7 @@
                     const isWeekend = label.includes('Sat') || label.includes('Sun');
                     const isLocked = lockedAssignments[name] && lockedAssignments[name][dIdx];
                     const bgColor = shiftColors[shiftCode] || '#ffffff';
+                    const lockIcon = isLocked ? '<span style="color: #ef4444; font-size: 0.6rem; vertical-align: top; margin-left: 2px;">🔒</span>' : '';
                     
                     bodyHtml += `
                         <td class="shift-cell ${isWeekend ? 'weekend' : ''} ${isLocked ? 'locked' : ''}" 
@@ -184,7 +185,7 @@
                             style="background-color: ${bgColor};"
                             onmousedown="startPaint(event)"
                             onmouseover="doPaint(event)"
-                        >${shiftCode}</td>
+                        >${shiftCode}${lockIcon}</td>
                     `;
                 });
                 bodyHtml += '</tr>';
@@ -237,10 +238,15 @@
 
         // Adjust wrapper height to Streamlit frame
         function setFrameHeight() {
-            Streamlit.setFrameHeight(document.getElementById('roster-wrapper').scrollHeight);
+            const height = document.getElementById('roster-wrapper').scrollHeight;
+            Streamlit.setFrameHeight(height);
         }
         window.addEventListener('resize', setFrameHeight);
+        
+        // Ensure height is correct after render
+        setInterval(setFrameHeight, 1000); 
         setTimeout(setFrameHeight, 100);
+        setTimeout(setFrameHeight, 500);
     </script>
 </body>
 </html>
