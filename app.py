@@ -694,20 +694,37 @@ def render_manage_shifts():
                         if end_dt <= start_dt:
                             end_dt = end_dt + timedelta(days=1)
                         
-                        s['code'] = edit_code
-                        s['name'] = edit_name
-                        s['type'] = edit_type
-                        s['start'] = s_time
-                        s['end'] = e_time
-                        s['duration'] = int((end_dt - start_dt).total_seconds() / 60)
-                        s['color'] = edit_color
-                        
-                        # Automatic Sort by Start Time
-                        st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
-                        save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
-                        st.session_state.editing_shift_id = None
-                        notify("Shift updated successfully:", detail=f"{s['code']} - {s['name']}")
-                        st.rerun()
+                        old_code = s['code']
+                        if edit_code != old_code and any(shift['code'] == edit_code for shift in st.session_state.shifts):
+                            notify("Update Failed", detail="Shift code already exists!", type="error")
+                            st.rerun()
+                        else:
+                            if edit_code != old_code:
+                                try: supabase.table("shifts").update({"code": edit_code}).eq("code", old_code).execute()
+                                except: pass
+                                
+                                # Cascade local demand references
+                                for t in ["default", "overrides"]:
+                                    for d_key, shifts_dict in st.session_state.demand.get(t, {}).items():
+                                        if old_code in shifts_dict:
+                                            shifts_dict[edit_code] = shifts_dict.pop(old_code)
+                                import threading
+                                threading.Thread(target=save_data, args=("demand", DEMAND_DATA_FILE, st.session_state.demand)).start()
+
+                            s['code'] = edit_code
+                            s['name'] = edit_name
+                            s['type'] = edit_type
+                            s['start'] = s_time
+                            s['end'] = e_time
+                            s['duration'] = int((end_dt - start_dt).total_seconds() / 60)
+                            s['color'] = edit_color
+                            
+                            # Automatic Sort by Start Time
+                            st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
+                            save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
+                            st.session_state.editing_shift_id = None
+                            notify("Shift updated successfully:", detail=f"{s['code']} - {s['name']}")
+                            st.rerun()
                 with f_col2:
                     if st.form_submit_button("❌ Cancel", use_container_width=True):
                         st.session_state.editing_shift_id = None
@@ -886,11 +903,8 @@ def render_manage_leave_types():
             updated = False
             
             with col_code:
-                edit_code = st.text_input("Code", value=leave.get('code', ''), max_chars=5, key=f"leave_code_{i}", disabled=True, help="Code cannot be modified. Delete and recreate if needed.")
-                if edit_code != leave.get('code'):
-                    leave['code'] = edit_code
-                    updated = True
-                    
+                edit_code = st.text_input("Code", value=leave.get('code', ''), max_chars=5, key=f"leave_code_{i}")
+                
             with col_name:
                 edit_name = st.text_input("Name", value=leave.get('name', ''), key=f"leave_name_{i}")
                 if edit_name != leave.get('name'):
@@ -917,11 +931,26 @@ def render_manage_leave_types():
                 
             col_save, col_del = st.columns(2)
             with col_save:
-                if updated:
+                if edit_code != leave.get('code') or edit_name != leave.get('name') or edit_paid != leave.get('is_paid') or edit_desc != leave.get('description') or edit_color != leave.get('color'):
                     if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
-                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
-                        notify("Leave type updated successfully:", detail=f"Changes for '{leave['name']}' saved")
-                        st.rerun()
+                        old_code = leave.get('code')
+                        if edit_code != old_code and any(l['code'] == edit_code for l in st.session_state.leaves):
+                            notify("Update Failed", detail="Leave code already exists!", type="error")
+                            st.rerun()
+                        else:
+                            if edit_code != old_code:
+                                try: supabase.table("leaves").update({"code": edit_code}).eq("code", old_code).execute()
+                                except: pass
+                            
+                            leave['code'] = edit_code
+                            leave['name'] = edit_name
+                            leave['is_paid'] = edit_paid
+                            leave['description'] = edit_desc
+                            leave['color'] = edit_color
+                        
+                            save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+                            notify("Leave type updated successfully:", detail=f"Changes for '{leave['name']}' saved")
+                            st.rerun()
             with col_del:
                 if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
                     deleted_leave = st.session_state.leaves[i]['name']
@@ -1333,7 +1362,7 @@ def render_manage_skills():
                 with st.form(f"edit_skill_form_{stable_key}"):
                     st.write(f"**Edit Skill: {skill['code']}**")
                     e_col1, e_col2 = st.columns([1, 2])
-                    edit_code = e_col1.text_input("Code", value=skill['code'], max_chars=5, disabled=True, help="Code cannot be modified.")
+                    edit_code = e_col1.text_input("Code", value=skill['code'], max_chars=5)
                     edit_name = e_col2.text_input("Name", value=skill['name'])
                     edit_desc = st.text_area("Description", value=skill.get('description', ''))
                     edit_color = st.color_picker("Color", value=skill.get('color', '#F0F4F8'))
@@ -1341,10 +1370,20 @@ def render_manage_skills():
                     f_col1, f_col2 = st.columns(2)
                     with f_col1:
                         if st.form_submit_button("✅ Save Changes", use_container_width=True):
-                            if edit_code != skill['code'] and any(s['code'] == edit_code for s in st.session_state.skills):
+                            old_code = skill['code']
+                            if edit_code != old_code and any(s['code'] == edit_code for s in st.session_state.skills):
                                 notify("Update Failed", detail="Skill code already exists!", type="error")
                                 st.rerun()
                             else:
+                                if edit_code != old_code:
+                                    try: supabase.table("skills").update({"code": edit_code}).eq("code", old_code).execute()
+                                    except: pass
+                                    for n in st.session_state.nurses:
+                                        if old_code in n.get('skills', []):
+                                            n['skills'] = [edit_code if sk == old_code else sk for sk in n['skills']]
+                                    import threading
+                                    threading.Thread(target=save_data, args=("nurses", NURSES_DATA_FILE, st.session_state.nurses)).start()
+                                
                                 skill['code'] = edit_code
                                 skill['name'] = edit_name
                                 skill['description'] = edit_desc
@@ -1496,38 +1535,40 @@ def render_manage_departments():
                     st.write(f"**Edit Department: {dept['name']}**")
                     col1, col2 = st.columns([1, 2])
                     with col1:
-                        edit_id = st.text_input("ID", value=dept['id'], disabled=True, help="ID cannot be modified. Delete and recreate if needed.")
+                        edit_id = st.text_input("ID", value=dept['id'])
                     with col2:
                         edit_name = st.text_input("Name", value=dept['name'])
 
                     f_col1, f_col2 = st.columns(2)
                     with f_col1:
                         if st.form_submit_button("✅ Save Changes", use_container_width=True):
-                            if edit_id != dept['id'] and any(d['id'].lower() == edit_id.lower() for d in st.session_state.departments):
+                            old_id = dept['id']
+                            if edit_id != old_id and any(d['id'].lower() == edit_id.lower() for d in st.session_state.departments):
                                 notify("Update Failed", detail="A department with this ID already exists!", type="error")
                                 st.rerun()
-                            elif edit_name != dept['name'] and any(d['name'].lower() == edit_name.lower() for d in st.session_state.departments if d['id'] != dept['id']):
+                            elif edit_name != dept['name'] and any(d['name'].lower() == edit_name.lower() for d in st.session_state.departments if d['id'] != old_id):
                                 notify("Update Failed", detail="A department with this name already exists!", type="error")
                                 st.rerun()
                             else:
-                                old_id = dept['id']
+                                if edit_id != old_id:
+                                    # Rename the ID directly in supabase to cascade FOREIGN KEY changes
+                                    try: supabase.table("departments").update({"id": edit_id}).eq("id", old_id).execute()
+                                    except: pass
+                                    # Cascade locally to nurses
+                                    for n in st.session_state.nurses:
+                                        if n.get("department_id") == old_id:
+                                            n["department_id"] = edit_id
+                                    # Background save nurses to sync the local cascade
+                                    import threading
+                                    threading.Thread(target=save_data, args=("nurses", NURSE_DATA_FILE, st.session_state.nurses)).start()
+                                    
                                 dept['id'] = edit_id
                                 dept['name'] = edit_name
                                 st.session_state.departments.sort(key=lambda x: x['name'].upper())
                                 save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
                                 
-                                # Cascade ID change to nurses
-                                if old_id != edit_id:
-                                    updated_nurses = 0
-                                    for nurse in st.session_state.nurses:
-                                        if nurse.get('department_id') == old_id:
-                                            nurse['department_id'] = edit_id
-                                            updated_nurses += 1
-                                    if updated_nurses > 0:
-                                        save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses)
-                                
                                 st.session_state.editing_dept_id = None
-                                notify("Department updated successfully:", detail=f"[{edit_id}] {edit_name} updated" + (f" ({updated_nurses} staff sync)" if old_id != edit_id and updated_nurses > 0 else ""))
+                                notify("Department updated successfully:", detail=f"[{edit_id}] {edit_name}")
                                 st.rerun()
                     with f_col2:
                         if st.form_submit_button("❌ Cancel", use_container_width=True):
