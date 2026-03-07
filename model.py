@@ -170,11 +170,12 @@ class NurseRosteringModel:
         if self.night_shifts:
             self._add_night_recovery_constraints()
 
-        # 4. Max 6 working days per week (Sliding window of 7 days)
+        # 4. Max 6 working days per week (Static 7-day blocks, e.g. Mon-Sun)
         for n in range(self.num_nurses):
-            # Rolling 7-day window: in any 7-day period, at most 6 working days
-            for start_day in range(self.num_days - 6):
-                week_window = range(start_day, start_day + 7)
+            # In every 7-day static block, at most 6 working days
+            # This ensures at least one day off per calendar week.
+            for w in range(0, self.num_days, 7):
+                week_window = range(w, min(w + 7, self.num_days))
                 self.model.Add(
                     sum(
                         self.x[(n, d, s)] 
@@ -183,16 +184,19 @@ class NurseRosteringModel:
                     ) <= 6
                 )
 
-        # 4b. Per-nurse Max consecutive working days (Max 7 as default)
+        # 4b. Max 7 Consecutive Days (Sliding window)
+        # This allows working 6 days in Week 1 and starting Week 2 with work, 
+        # but prevents working more than 7 days in a row across the week boundary.
         for n_idx, nurse in enumerate(self.nurses):
             limit = nurse.get('max_consecutive_work_days', 7)
-            # Sliding window to enforce limit consecutive days
+            # Sliding window of size (limit + 1) to enforce that if you work 'limit' days, 
+            # you MUST have the next day OFF.
             for start_day in range(self.num_days - limit):
-                window_days = range(start_day, start_day + limit + 1)
+                window_8d = range(start_day, start_day + limit + 1)
                 self.model.Add(
                     sum(
                         self.x[(n_idx, d, s)]
-                        for d in window_days
+                        for d in window_8d
                         for s in self.shifts
                     ) <= limit
                 )

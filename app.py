@@ -1799,9 +1799,9 @@ elif st.session_state.current_page == 'Hard Constraints':
 
     st.markdown('''
 ### 🚫 Strict Work Rules
+- **Max 6 Shifts/Week:** No nurse works more than 6 days in a static **Monday-to-Sunday** week. This ensures at least one day off per calendar week.
+- **Max 7 Consecutive Days:** No nurse works more than 7 days in a row, even if those days span across two different weeks.
 - **Max 1 Shift/Day:** No nurse works more than 1 shift per day.
-- **Max 6 Shifts/Week:** No nurse works more than 6 days in any 7-day rolling window.
-- **Max 7 Consecutive Days:** No nurse works more than 7 days in a row.
 - **Leave Compliance:** Nurses on leave are not assigned.
 
 ### 🌙 Night Shift Recovery
