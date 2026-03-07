@@ -886,7 +886,7 @@ def render_manage_leave_types():
             updated = False
             
             with col_code:
-                edit_code = st.text_input("Code", value=leave.get('code', ''), max_chars=5, key=f"leave_code_{i}")
+                edit_code = st.text_input("Code", value=leave.get('code', ''), max_chars=5, key=f"leave_code_{i}", disabled=True, help="Code cannot be modified. Delete and recreate if needed.")
                 if edit_code != leave.get('code'):
                     leave['code'] = edit_code
                     updated = True
@@ -925,6 +925,9 @@ def render_manage_leave_types():
             with col_del:
                 if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
                     deleted_leave = st.session_state.leaves[i]['name']
+                    try:
+                        supabase.table("leaves").delete().eq("code", leave.get('code')).execute()
+                    except: pass
                     st.session_state.leaves.pop(i)
                     save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
                     notify("Leave type deleted successfully:", detail=f"'{deleted_leave}' removed")
@@ -1317,6 +1320,9 @@ def render_manage_skills():
                     st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                     if st.button("🗑️", key=f"del_skill_{stable_key}", help="Delete Skill"):
                         deleted_skill = st.session_state.skills[i]['name']
+                        try:
+                            supabase.table("skills").delete().eq("code", skill['code']).execute()
+                        except: pass
                         st.session_state.skills.pop(i)
                         save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
                         notify("Skill deleted successfully:", detail=f"'{deleted_skill}' removed")
@@ -1327,7 +1333,7 @@ def render_manage_skills():
                 with st.form(f"edit_skill_form_{stable_key}"):
                     st.write(f"**Edit Skill: {skill['code']}**")
                     e_col1, e_col2 = st.columns([1, 2])
-                    edit_code = e_col1.text_input("Code", value=skill['code'], max_chars=5)
+                    edit_code = e_col1.text_input("Code", value=skill['code'], max_chars=5, disabled=True, help="Code cannot be modified.")
                     edit_name = e_col2.text_input("Name", value=skill['name'])
                     edit_desc = st.text_area("Description", value=skill.get('description', ''))
                     edit_color = st.color_picker("Color", value=skill.get('color', '#F0F4F8'))
@@ -1476,6 +1482,9 @@ def render_manage_departments():
                             st.rerun()
                         else:
                             deleted_name = dept['name']
+                            try:
+                                supabase.table("departments").delete().eq("id", dept['id']).execute()
+                            except: pass
                             st.session_state.departments.pop(i)
                             save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
                             notify("Department deleted successfully:", detail=f"'{deleted_name}' removed")
@@ -1487,7 +1496,7 @@ def render_manage_departments():
                     st.write(f"**Edit Department: {dept['name']}**")
                     col1, col2 = st.columns([1, 2])
                     with col1:
-                        edit_id = st.text_input("ID", value=dept['id'])
+                        edit_id = st.text_input("ID", value=dept['id'], disabled=True, help="ID cannot be modified. Delete and recreate if needed.")
                     with col2:
                         edit_name = st.text_input("Name", value=dept['name'])
 
