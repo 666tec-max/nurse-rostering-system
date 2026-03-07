@@ -607,6 +607,21 @@ def render_manage_shifts():
     # Track which shift is being edited
     if 'editing_shift_id' not in st.session_state:
         st.session_state.editing_shift_id = None
+        
+    # --- Bulk Actions ---
+    selected_for_deletion = [s['id'] for s in st.session_state.shifts if st.session_state.get(f"bulk_del_shift_{s['id']}", False)]
+    if selected_for_deletion:
+        if st.button(f"🗑️ Delete {len(selected_for_deletion)} Selected Shifts", type="primary"):
+            shift_codes_to_del = [s['code'] for s in st.session_state.shifts if s['id'] in selected_for_deletion]
+            for code in shift_codes_to_del:
+                try: supabase.table("shifts").delete().eq("code", code).execute()
+                except: pass
+            st.session_state.shifts = [s for s in st.session_state.shifts if s['id'] not in selected_for_deletion]
+            save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
+            for sid in selected_for_deletion:
+                if f"bulk_del_shift_{sid}" in st.session_state: del st.session_state[f"bulk_del_shift_{sid}"]
+            notify("Bulk Delete Successful", detail=f"Removed {len(selected_for_deletion)} shifts.")
+            st.rerun()
     
     for i, s in enumerate(st.session_state.shifts):
         if 'id' not in s:
@@ -617,9 +632,13 @@ def render_manage_shifts():
         # --- Render Shift Card with Side-by-Side Buttons ---
         with st.container():
             # Use columns to ensure buttons are strictly alongside the info
-            card_cols = st.columns([8, 0.8, 0.8])
+            card_cols = st.columns([0.5, 7.5, 0.8, 0.8])
             
             with card_cols[0]:
+                st.markdown("<div style='padding-top: 25px;'></div>", unsafe_allow_html=True)
+                st.checkbox("", key=f"bulk_del_shift_{stable_key}", label_visibility="collapsed")
+                
+            with card_cols[1]:
                 st.markdown(f"""
                 <div class="shift-card" style="margin-bottom: 0; border: none; box-shadow: none; padding: 0;">
                     <div class="shift-info">
@@ -634,12 +653,12 @@ def render_manage_shifts():
                 </div>
                 """, unsafe_allow_html=True)
             
-            with card_cols[1]:
+            with card_cols[2]:
                 # Vertical centering hack for Streamlit buttons
                 st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                 if st.button("✏️", key=f"edit_btn_{stable_key}", help="Edit Shift", use_container_width=True):
                     st.session_state.editing_shift_id = s['id']
-            with card_cols[2]:
+            with card_cols[3]:
                 st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                 if st.button("🗑️", key=f"del_btn_{stable_key}", help="Delete Shift", use_container_width=True):
                     deleted_name = st.session_state.shifts[i]['name']
@@ -897,70 +916,89 @@ def render_manage_leave_types():
     st.markdown("---")
     st.subheader("Current Leave Types")
     
-    for i, leave in enumerate(st.session_state.leaves):
-        with st.expander(f"[{leave['code']}] {leave['name']}", expanded=False):
-            col_code, col_name, col_paid = st.columns([1, 2, 1])
-            updated = False
+    # --- Bulk Actions ---
+    selected_for_deletion = [l['code'] for l in st.session_state.leaves if st.session_state.get(f"bulk_del_leave_{l['code']}", False)]
+    if selected_for_deletion:
+        if st.button(f"🗑️ Delete {len(selected_for_deletion)} Selected Leaves", type="primary"):
+            for code in selected_for_deletion:
+                try: supabase.table("leaves").delete().eq("code", code).execute()
+                except: pass
+            st.session_state.leaves = [l for l in st.session_state.leaves if l['code'] not in selected_for_deletion]
+            save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+            for code in selected_for_deletion:
+                if f"bulk_del_leave_{code}" in st.session_state: del st.session_state[f"bulk_del_leave_{code}"]
+            notify("Bulk Delete Successful", detail=f"Removed {len(selected_for_deletion)} leave types.")
+            st.rerun()
             
-            with col_code:
-                edit_code = st.text_input("Code", value=leave.get('code', ''), max_chars=5, key=f"leave_code_{i}")
+    for i, leave in enumerate(st.session_state.leaves):
+        l_col_cb, l_col_exp = st.columns([0.5, 9.5])
+        with l_col_cb:
+            st.markdown("<div style='padding-top: 15px;'></div>", unsafe_allow_html=True)
+            st.checkbox("", key=f"bulk_del_leave_{leave['code']}", label_visibility="collapsed")
+        with l_col_exp:
+            with st.expander(f"[{leave['code']}] {leave['name']}", expanded=False):
+                col_code, col_name, col_paid = st.columns([1, 2, 1])
+                updated = False
                 
-            with col_name:
-                edit_name = st.text_input("Name", value=leave.get('name', ''), key=f"leave_name_{i}")
-                if edit_name != leave.get('name'):
-                    leave['name'] = edit_name
-                    updated = True
+                with col_code:
+                    edit_code = st.text_input("Code", value=leave.get('code', ''), max_chars=5, key=f"leave_code_{i}")
                     
-            with col_paid:
-                st.write("") # Spacer
-                st.write("") # Spacer
-                edit_paid = st.checkbox("Paid Leave", value=leave.get('is_paid', True), key=f"leave_paid_{i}")
-                if edit_paid != leave.get('is_paid'):
-                    leave['is_paid'] = edit_paid
-                    updated = True
-                    
-            edit_desc = st.text_input("Description", value=leave.get('description', ''), key=f"leave_desc_{i}")
-            if edit_desc != leave.get('description'):
-                leave['description'] = edit_desc
-                updated = True
-                
-            edit_color = st.color_picker("Color", value=leave.get('color', '#E0E0E0'), key=f"leave_color_{i}")
-            if edit_color != leave.get('color'):
-                leave['color'] = edit_color
-                updated = True
-                
-            col_save, col_del = st.columns(2)
-            with col_save:
-                if edit_code != leave.get('code') or edit_name != leave.get('name') or edit_paid != leave.get('is_paid') or edit_desc != leave.get('description') or edit_color != leave.get('color'):
-                    if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
-                        old_code = leave.get('code')
-                        if edit_code != old_code and any(l['code'] == edit_code for l in st.session_state.leaves):
-                            notify("Update Failed", detail="Leave code already exists!", type="error")
-                            st.rerun()
-                        else:
-                            if edit_code != old_code:
-                                try: supabase.table("leaves").update({"code": edit_code}).eq("code", old_code).execute()
-                                except: pass
-                            
-                            leave['code'] = edit_code
-                            leave['name'] = edit_name
-                            leave['is_paid'] = edit_paid
-                            leave['description'] = edit_desc
-                            leave['color'] = edit_color
+                with col_name:
+                    edit_name = st.text_input("Name", value=leave.get('name', ''), key=f"leave_name_{i}")
+                    if edit_name != leave.get('name'):
+                        leave['name'] = edit_name
+                        updated = True
                         
-                            save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
-                            notify("Leave type updated successfully:", detail=f"Changes for '{leave['name']}' saved")
-                            st.rerun()
-            with col_del:
-                if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
-                    deleted_leave = st.session_state.leaves[i]['name']
-                    try:
-                        supabase.table("leaves").delete().eq("code", leave.get('code')).execute()
-                    except: pass
-                    st.session_state.leaves.pop(i)
-                    save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
-                    notify("Leave type deleted successfully:", detail=f"'{deleted_leave}' removed")
-                    st.rerun()
+                with col_paid:
+                    st.write("") # Spacer
+                    st.write("") # Spacer
+                    edit_paid = st.checkbox("Paid Leave", value=leave.get('is_paid', True), key=f"leave_paid_{i}")
+                    if edit_paid != leave.get('is_paid'):
+                        leave['is_paid'] = edit_paid
+                        updated = True
+                        
+                edit_desc = st.text_input("Description", value=leave.get('description', ''), key=f"leave_desc_{i}")
+                if edit_desc != leave.get('description'):
+                    leave['description'] = edit_desc
+                    updated = True
+                    
+                edit_color = st.color_picker("Color", value=leave.get('color', '#E0E0E0'), key=f"leave_color_{i}")
+                if edit_color != leave.get('color'):
+                    leave['color'] = edit_color
+                    updated = True
+                    
+                col_save, col_del = st.columns(2)
+                with col_save:
+                    if edit_code != leave.get('code') or edit_name != leave.get('name') or edit_paid != leave.get('is_paid') or edit_desc != leave.get('description') or edit_color != leave.get('color'):
+                        if st.button("Save Changes", key=f"save_leave_{i}", use_container_width=True):
+                            old_code = leave.get('code')
+                            if edit_code != old_code and any(l['code'] == edit_code for l in st.session_state.leaves):
+                                notify("Update Failed", detail="Leave code already exists!", type="error")
+                                st.rerun()
+                            else:
+                                if edit_code != old_code:
+                                    try: supabase.table("leaves").update({"code": edit_code}).eq("code", old_code).execute()
+                                    except: pass
+                                
+                                leave['code'] = edit_code
+                                leave['name'] = edit_name
+                                leave['is_paid'] = edit_paid
+                                leave['description'] = edit_desc
+                                leave['color'] = edit_color
+                            
+                                save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+                                notify("Leave type updated successfully:", detail=f"Changes for '{leave['name']}' saved")
+                                st.rerun()
+                with col_del:
+                    if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
+                        deleted_leave = st.session_state.leaves[i]['name']
+                        try:
+                            supabase.table("leaves").delete().eq("code", leave.get('code')).execute()
+                        except: pass
+                        st.session_state.leaves.pop(i)
+                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+                        notify("Leave type deleted successfully:", detail=f"'{deleted_leave}' removed")
+                        st.rerun()
 
 # ---------------------------------------------------------------------
 # Staff Management Dialogs
@@ -990,9 +1028,12 @@ def edit_staff_dialog(staff_member):
         new_dept_idx = st.selectbox("Department", range(len(dept_names)), format_func=lambda idx: dept_names[idx], index=curr_dept_idx)
         
         # Skills
+        st.write("Skills")
         skill_options = [f"{skill['code']}" for skill in st.session_state.skills]
-        curr_skills = staff_member.get('skills', [])
-        new_skills = st.multiselect("Skills", options=skill_options, default=[s for s in curr_skills if s in skill_options])
+        curr_skills = set(staff_member.get('skills', []))
+        with st.popover("Select Skills...", use_container_width=True):
+            new_skills_dict = {sk: st.checkbox(sk, value=(sk in curr_skills), key=f"es_{staff_member['employee_id']}_{sk}") for sk in skill_options}
+        new_skills = [sk for sk, checked in new_skills_dict.items() if checked]
         
         # Constraints
         st.write("---")
@@ -1115,7 +1156,10 @@ def render_manage_staffs():
                 add_dept_idx = st.selectbox("Department", range(len(dept_names)), format_func=lambda i: dept_names[i], key="add_staff_dept")
             with c5:
                 skill_options = [skill['code'] for skill in st.session_state.skills]
-                add_skills = st.multiselect("Skills", options=skill_options, key="add_staff_skills")
+                st.write("**Skills**")
+                with st.popover("Select Skills...", use_container_width=True):
+                    add_skills_dict = {sk: st.checkbox(sk, key=f"as_skill_{sk}") for sk in skill_options}
+                add_skills = [sk for sk, checked in add_skills_dict.items() if checked]
             
             st.write("---")
             cc1, cc2 = st.columns(2)
@@ -1160,9 +1204,8 @@ def render_manage_staffs():
                             notify("Employee Added", f"{add_name} added successfully.")
                             
                             # Clear form keys
-                            reset_form_keys(["add_staff_name", "add_staff_id", "add_staff_grade", 
-                                           "add_staff_dept", "add_staff_skills", "add_staff_night", 
-                                           "add_staff_consec"])
+                            keys_to_reset = ["add_staff_name", "add_staff_id", "add_staff_grade", "add_staff_dept", "add_staff_night", "add_staff_consec"] + [f"as_skill_{sk}" for sk in skill_options]
+                            reset_form_keys(keys_to_reset)
                         except Exception as e:
                             st.error(f"Error adding staff: {e}")
                 else:
@@ -1204,9 +1247,26 @@ def render_manage_staffs():
         filtered_staff = sorted(filtered_staff, key=lambda x: x['employee_id'])
 
     # 4. Table Display with Scrollable Body
+    
+    # --- Bulk Actions ---
+    selected_for_deletion = [s['employee_id'] for s in filtered_staff if st.session_state.get(f"bulk_del_{s['employee_id']}", False)]
+    if selected_for_deletion:
+        if st.button(f"🗑️ Delete {len(selected_for_deletion)} Selected Personnel", type="primary"):
+            for emp_id in selected_for_deletion:
+                try: staff_db.delete_staff(supabase, emp_id)
+                except: pass
+            st.session_state.nurses = staff_db.fetch_all_staff(supabase)
+            for s in st.session_state.nurses: s['id'] = s['employee_id']
+            # Clear checkboxes
+            for emp_id in selected_for_deletion:
+                if f"bulk_del_{emp_id}" in st.session_state: del st.session_state[f"bulk_del_{emp_id}"]
+            notify("Bulk Delete Successful", detail=f"Removed {len(selected_for_deletion)} personnel.")
+            st.rerun()
+            
     # Header
     st.markdown("""
         <div class='staff-table-header'>
+            <div style='flex: 0.5;'>☑️</div>
             <div style='flex: 2;'>Name</div>
             <div style='flex: 1.5;'>Employee ID</div>
             <div style='flex: 1;'>Grade</div>
@@ -1224,8 +1284,10 @@ def render_manage_staffs():
             for idx, s in enumerate(filtered_staff):
                 with st.container():
                     st.markdown("<div class='staff-row'>", unsafe_allow_html=True)
-                    r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([2, 1.5, 1, 1.5, 2.5, 1])
+                    r_col_cb, r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([0.5, 2, 1.5, 1, 1.5, 2.5, 1])
                     
+                    with r_col_cb:
+                        st.checkbox("", key=f"bulk_del_{s['employee_id']}", label_visibility="collapsed")
                     with r_col1:
                         st.write(f"**{s['name']}**")
                     with r_col2:
@@ -1521,14 +1583,42 @@ def render_manage_departments():
     if not st.session_state.departments:
         st.info("No departments defined yet. Add your first department above.")
     else:
+        # --- Bulk Actions ---
+        selected_for_deletion = [d['id'] for d in st.session_state.departments if st.session_state.get(f"bulk_del_dept_{d['id']}", False)]
+        if selected_for_deletion:
+            if st.button(f"🗑️ Delete {len(selected_for_deletion)} Selected Departments", type="primary"):
+                safe_to_delete = []
+                for dept_id in selected_for_deletion:
+                    if sum(1 for n in st.session_state.nurses if n.get('department_id') == dept_id) == 0:
+                        safe_to_delete.append(dept_id)
+                
+                if len(safe_to_delete) < len(selected_for_deletion):
+                    notify("Partial Deletion", detail=f"{len(selected_for_deletion) - len(safe_to_delete)} departments could not be deleted because staff are assigned to them.", type="warning")
+                
+                for dept_id in safe_to_delete:
+                    try: supabase.table("departments").delete().eq("id", dept_id).execute()
+                    except: pass
+                
+                st.session_state.departments = [d for d in st.session_state.departments if d['id'] not in safe_to_delete]
+                save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
+                
+                for dept_id in selected_for_deletion:
+                    if f"bulk_del_dept_{dept_id}" in st.session_state: del st.session_state[f"bulk_del_dept_{dept_id}"]
+                if safe_to_delete: notify("Bulk Delete Successful", detail=f"Removed {len(safe_to_delete)} departments.")
+                st.rerun()
+
         for i, dept in enumerate(st.session_state.departments):
             # Count nurses in this department
             nurse_count = sum(1 for n in st.session_state.nurses if n.get('department_id') == dept['id'])
 
             with st.container():
-                card_cols = st.columns([8, 0.8, 0.8])
-
+                card_cols = st.columns([0.5, 7.5, 0.8, 0.8])
+                
                 with card_cols[0]:
+                    st.markdown("<div style='padding-top: 25px;'></div>", unsafe_allow_html=True)
+                    st.checkbox("", key=f"bulk_del_dept_{dept['id']}", label_visibility="collapsed")
+
+                with card_cols[1]:
                     st.markdown(f"""
                     <div class="dept-card" style="margin-bottom: 0; border: none; box-shadow: none; padding: 0;">
                         <div class="dept-info">
@@ -1541,12 +1631,12 @@ def render_manage_departments():
                     </div>
                     """, unsafe_allow_html=True)
 
-                with card_cols[1]:
+                with card_cols[2]:
                     st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                     if st.button("✏️", key=f"edit_dept_{dept['id']}", help="Edit Department"):
                         st.session_state.editing_dept_id = dept['id']
 
-                with card_cols[2]:
+                with card_cols[3]:
                     st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                     if st.button("🗑️", key=f"del_dept_{dept['id']}", help="Delete Department"):
                         if nurse_count > 0:
