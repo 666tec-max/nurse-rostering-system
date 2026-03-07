@@ -1701,10 +1701,7 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = 'Generate Schedule'
 
 with st.sidebar:
-    st.markdown(f"### ⚡ Last Action")
-    st.info(st.session_state.last_action_message)
-    st.markdown("---")
-    
+
     st.markdown('### Main Page')
     st.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
 
