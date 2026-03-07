@@ -9,6 +9,7 @@ import calendar
 from model import NurseRosteringModel
 from supabase import create_client, Client
 import staff_db
+from professional_roster_component import professional_roster
 
 # --- Supabase Initialization ---
 try:
@@ -378,7 +379,7 @@ if 'skills' not in st.session_state:
     st.session_state.skills.sort(key=lambda x: x['code'].upper())
 
 if 'nurses' not in st.session_state:
-    raw_staff = staff_db.fetch_all_staff(supabase)
+    raw_staff = fetch_all_staff(supabase)
     if not raw_staff:
         # Fallback to JSON or defaults if Supabase is empty
         raw_staff = load_data("nurses", NURSE_DATA_FILE, [
@@ -440,6 +441,12 @@ if 'schedule_weights' not in st.session_state:
         'night_fairness': 5,
         'weekend_fairness': 5
     }
+
+if 'zoom_level' not in st.session_state:
+    st.session_state.zoom_level = 100
+
+if 'painter_shift' not in st.session_state:
+    st.session_state.painter_shift = None
 
 # ---------------------------------------------------------------------
 # Dialog Modals
@@ -2039,58 +2046,59 @@ elif st.session_state.current_page == 'Generate Schedule':
                     st.rerun()
 
             shift_options = ['-'] + [s['code'] for s in st.session_state.shifts]
-            col_config = {
-                col: st.column_config.SelectboxColumn("Shift", options=shift_options, required=True)
-                for col in date_labels
-            }
 
-            def style_schedule(df):
-                styled_df = pd.DataFrame('', index=df.index, columns=df.columns)
-                for i, col in enumerate(df.columns):
-                    for nurse in df.index:
-                        val = df.at[nurse, col]
-                        is_locked = (nurse, i) in st.session_state.locked_assignments
-                        
-                        current_colors = {s['code']: s.get('color', '#FFFFFF') for s in st.session_state.shifts}
-                        first_val = val.split(',')[0].strip() if isinstance(val, str) else ''
-                        color = current_colors.get(first_val, '#FFFFFF')
-                        
-                        if val == '-':
-                            base_style = 'background-color: transparent; color: #999;'
-                        else:
-                            base_style = f'background-color: {color}; color: #333; font-weight: bold;'
-                            
-                        if is_locked:
-                            # Red outline for locked cells
-                            base_style += ' outline: 2px solid #E74C3C; outline-offset: -2px;' 
-                            
-                        styled_df.at[nurse, col] = base_style
-                return styled_df
-
-            edited_df = st.data_editor(
-                df_schedule.style.apply(style_schedule, axis=None), 
-                column_config=col_config,
-                use_container_width=True,
-                height=min(400, 50 + len(df_schedule) * 35),
-                key="roster_editor"
-            )
+            # --- Roster Control Bar (Zoom & Painter) ---
+            ctrl_col1, ctrl_col2 = st.columns([1, 2])
+            with ctrl_col1:
+                st.session_state.zoom_level = st.select_slider(
+                    "🔍 Zoom Level", 
+                    options=[50, 75, 90, 100, 110, 125, 150], 
+                    value=st.session_state.zoom_level
+                )
             
-            # Detect changes from editor
-            has_changes = False
-            for nurse in edited_df.index:
-                for i, col in enumerate(date_labels):
-                    old_val = df_schedule.at[nurse, col]
-                    if isinstance(old_val, str):
-                        old_val = old_val.split(',')[0].strip()
-                    new_val = edited_df.at[nurse, col]
-                    if old_val != new_val:
-                        st.session_state.locked_assignments[(nurse, i)] = new_val
-                        has_changes = True
-                        
-            if has_changes:
-                # Update underlying last_schedule so that the next run reflects the new edits
-                st.session_state.last_schedule = edited_df.to_dict(orient='index')
-                notify("Manual Edit Saved", "Shift locked. Regenerate to update statistics and other assignments.", type="success")
+            with ctrl_col2:
+                st.write("🖌️ **Shift Painter**")
+                p_cols = st.columns(len(shift_options))
+                for idx, opt in enumerate(shift_options):
+                    is_active = st.session_state.painter_shift == opt
+                    btn_type = "primary" if is_active else "secondary"
+                    if p_cols[idx].button(opt, key=f"painter_{opt}", type=btn_type, use_container_width=True):
+                        st.session_state.painter_shift = opt if not is_active else None
+                        st.rerun()
+
+            # Prepare data for component
+            nurse_names = list(df_schedule.index)
+            locked_comp_data = {}
+            for (n_name, d_idx) in st.session_state.locked_assignments:
+                if n_name not in locked_comp_data:
+                    locked_comp_data[n_name] = {}
+                locked_comp_data[n_name][d_idx] = True
+
+            shift_colors = {s['code']: s.get('color', '#E0E0E0') for s in st.session_state.shifts}
+            shift_colors['-'] = '#FFFFFF'
+
+            # Render Custom Component
+            edit_event = professional_roster(
+                nurse_names=nurse_names,
+                date_labels=date_labels,
+                schedule_data=df_schedule.to_dict(orient='list'),
+                shift_colors=shift_colors,
+                locked_assignments=locked_comp_data,
+                zoom_level=st.session_state.zoom_level,
+                painter_shift=st.session_state.painter_shift,
+                key="professional_roster_grid"
+            )
+
+            if edit_event:
+                # edit_event is {nurse: str, day: int, shift: str}
+                n_name = edit_event['nurse']
+                d_idx = edit_event['day']
+                new_shift = edit_event['shift']
+                
+                # Update locks
+                st.session_state.locked_assignments[(n_name, d_idx)] = new_shift
+                # Update schedule data immediately for the next render
+                st.session_state.last_schedule[n_name][d_idx] = new_shift
                 st.rerun()
                 
             # Excel Export

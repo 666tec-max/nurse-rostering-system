@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.4.0/dist/index.min.js"></script>
+    <style>
+        :root {
+            --row-height: 48px;
+            --name-width: 160px;
+            --cell-width: 80px; /* Default */
+            --header-bg: #fdfdfd;
+            --border-color: #e2e8f0;
+            --locked-outline: #ef4444;
+            --weekend-bg: #f8fafc;
+            --font-size: 0.875rem;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+        }
+
+        #zoom-container {
+            transform-origin: top left;
+        }
+
+        #roster-wrapper {
+            width: 100%;
+            height: 100vh;
+            overflow: auto;
+            border: 1px solid var(--border-color);
+            background: white;
+            position: relative;
+        }
+
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+        }
+
+        th, td {
+            height: var(--row-height);
+            border-right: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+            vertical-align: middle;
+            user-select: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding: 0 4px;
+        }
+
+        /* Sticky Personnel Header */
+        th.sticky-col, td.sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            background: var(--header-bg);
+            width: var(--name-width);
+            text-align: left;
+            padding-left: 12px;
+            border-right: 2px solid var(--border-color);
+            font-weight: 500;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: var(--header-bg);
+            font-weight: 600;
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        thead th.sticky-col {
+            z-index: 30;
+        }
+
+        .shift-cell {
+            cursor: pointer;
+            width: var(--cell-width);
+            font-weight: 600;
+            font-size: var(--font-size);
+            transition: all 0.15s ease;
+        }
+
+        .shift-cell:hover {
+            filter: brightness(0.92);
+            transform: scale(0.98);
+        }
+
+        .weekend {
+            background-color: var(--weekend-bg);
+        }
+
+        .locked {
+            box-shadow: inset 0 0 0 2px var(--locked-outline);
+            border-radius: 4px;
+        }
+
+        .night-indicator {
+            width: 8px;
+            height: 8px;
+            background: #6366f1;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        /* Painter active style */
+        .painting-mode .shift-cell {
+            cursor: cell;
+        }
+    </style>
+</head>
+<body>
+    <div id="roster-wrapper">
+        <div id="zoom-container">
+            <table id="roster-table">
+                <thead id="roster-head"></thead>
+                <tbody id="roster-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let isMouseDown = false;
+        let currentPainterShift = null;
+        let shiftColors = {};
+        let lockedAssignments = {};
+        let scheduleData = {};
+        let dateLabels = [];
+        let nurseNames = [];
+
+        function onStreamlitRender(event) {
+            const data = event.detail.args;
+            nurseNames = data.nurse_names;
+            dateLabels = data.date_labels;
+            scheduleData = data.schedule_data;
+            shiftColors = data.shift_colors;
+            lockedAssignments = data.locked_assignments || {};
+            currentPainterShift = data.painter_shift;
+            
+            const zoom = (data.zoom_level || 100) / 100;
+            const container = document.getElementById('zoom-container');
+            container.style.transform = `scale(${zoom})`;
+            
+            renderRoster();
+        }
+
+        function renderRoster() {
+            const head = document.getElementById('roster-head');
+            const body = document.getElementById('roster-body');
+            
+            // Render Head
+            let headHtml = '<tr><th class="sticky-col">Personnel</th>';
+            dateLabels.forEach(label => {
+                const isWeekend = label.includes('Sat') || label.includes('Sun');
+                headHtml += `<th class="${isWeekend ? 'weekend' : ''}">${label}</th>`;
+            });
+            headHtml += '</tr>';
+            head.innerHTML = headHtml;
+
+            // Render Body
+            let bodyHtml = '';
+            nurseNames.forEach(name => {
+                bodyHtml += `<tr><td class="sticky-col">${name}</td>`;
+                dateLabels.forEach((label, dIdx) => {
+                    const shiftCode = scheduleData[name][dIdx] || '-';
+                    const isWeekend = label.includes('Sat') || label.includes('Sun');
+                    const isLocked = lockedAssignments[name] && lockedAssignments[name][dIdx];
+                    const bgColor = shiftColors[shiftCode] || '#ffffff';
+                    
+                    bodyHtml += `
+                        <td class="shift-cell ${isWeekend ? 'weekend' : ''} ${isLocked ? 'locked' : ''}" 
+                            data-nurse="${name}" data-day="${dIdx}"
+                            style="background-color: ${bgColor};"
+                            onmousedown="startPaint(event)"
+                            onmouseover="doPaint(event)"
+                        >${shiftCode}</td>
+                    `;
+                });
+                bodyHtml += '</tr>';
+            });
+            body.innerHTML = bodyHtml;
+            
+            if (currentPainterShift) {
+                document.body.classList.add('painting-mode');
+            } else {
+                document.body.classList.remove('painting-mode');
+            }
+        }
+
+        function startPaint(e) {
+            if (!currentPainterShift) return;
+            isMouseDown = true;
+            paintCell(e.target);
+        }
+
+        function doPaint(e) {
+            if (isMouseDown && currentPainterShift) {
+                paintCell(e.target);
+            }
+        }
+
+        function paintCell(cell) {
+            const nurse = cell.dataset.nurse;
+            const day = parseInt(cell.dataset.day);
+            
+            if (!nurse) return;
+
+            cell.innerText = currentPainterShift;
+            cell.style.backgroundColor = shiftColors[currentPainterShift] || '#ffffff';
+            cell.classList.add('locked');
+            
+            // Notify Streamlit
+            Streamlit.setComponentValue({
+                nurse: nurse,
+                day: day,
+                shift: currentPainterShift
+            });
+        }
+
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        Streamlit.setComponentReady();
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onStreamlitRender);
+
+        // Adjust wrapper height to Streamlit frame
+        function setFrameHeight() {
+            Streamlit.setFrameHeight(document.getElementById('roster-wrapper').scrollHeight);
+        }
+        window.addEventListener('resize', setFrameHeight);
+        setTimeout(setFrameHeight, 100);
+    </script>
+</body>
+</html>
