@@ -1857,30 +1857,31 @@ elif st.session_state.current_page == 'Generate Schedule':
     st.header("Schedule Generation")
     st.info("The solver will prioritize filling extra shifts (utilization) while keeping the workload balanced (fairness).")
 
-    # Load Saved Roster
-    with st.expander("📂 Load Saved Roster (Cloud)", expanded=False):
-        try:
-            res = supabase.table("rosters").select("id, name, start_date, end_date, created_at").order("created_at", desc=True).execute()
-            if res.data:
-                roster_options = {
-                    r['id']: f"{r['name']} (Created: {datetime.fromisoformat(r['created_at']).strftime('%b %d, %H:%M')})"
-                    for r in res.data
-                }
-                selected_roster_id = st.selectbox("Select a Saved Roster", options=list(roster_options.keys()), format_func=lambda x: roster_options[x], label_visibility="collapsed")
-                if st.button("Load Selected Roster", type="secondary"):
-                    r_data = supabase.table("rosters").select("*").eq("id", selected_roster_id).single().execute()
-                    if r_data.data:
-                        st.session_state.last_schedule = r_data.data['schedule_data']
-                        st.session_state.roster_start_date = datetime.strptime(r_data.data['start_date'], "%Y-%m-%d").date()
-                        st.session_state.roster_end_date = datetime.strptime(r_data.data['end_date'], "%Y-%m-%d").date()
-                        st.session_state.last_stats = None
-                        st.session_state.locked_assignments = {}
-                        notify("Roster Loaded", detail=f"Successfully loaded {r_data.data['name']}", type="success")
-                        st.rerun()
-            else:
-                st.write("No saved rosters found in the cloud.")
-        except Exception as e:
-            st.error(f"Error loading rosters from cloud: {e}")
+    # --- Automated Roster Loading ---
+    # When a department is selected, check if a roster already exists for this range.
+    # We only auto-load if last_schedule is None (e.g., initial page load or after department change)
+    if selected_dept_id:
+        # Check if we need to auto-load (e.g., if the user hasn't generated anything yet this session)
+        if st.session_state.get('last_schedule') is None:
+            try:
+                # Fetch newest roster for this department and same date range
+                res = supabase.table("rosters").select("*") \
+                    .eq("department_id", selected_dept_id) \
+                    .eq("start_date", st.session_state.roster_start_date.strftime("%Y-%m-%d")) \
+                    .eq("end_date", st.session_state.roster_end_date.strftime("%Y-%m-%d")) \
+                    .order("created_at", desc=True) \
+                    .limit(1) \
+                    .execute()
+                
+                if res.data:
+                    latest = res.data[0]
+                    st.session_state.last_schedule = latest['schedule_data']
+                    st.session_state.last_stats = None # Will be recalculated on render or re-gen
+                    st.session_state.locked_assignments = {}
+                    notify("Roster Auto-Loaded", detail=f"Fetched the latest saved roster for **{selected_dept_name}**.", type="success")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Auto-load failed: {e}")
 
     if 'last_schedule' not in st.session_state:
         st.session_state.last_schedule = None
@@ -1890,10 +1891,21 @@ elif st.session_state.current_page == 'Generate Schedule':
         st.session_state.locked_assignments = {}
 
     # --- Department Selector ---
+    def on_dept_change():
+        st.session_state.last_schedule = None
+        st.session_state.last_stats = None
+        st.session_state.locked_assignments = {}
+
     dept_names = [d['name'] for d in st.session_state.departments]
     dept_ids = [d['id'] for d in st.session_state.departments]
     if dept_names:
-        selected_dept_idx = st.selectbox("Select Department", range(len(dept_names)), format_func=lambda i: dept_names[i], key="schedule_dept_select")
+        selected_dept_idx = st.selectbox(
+            "Select Department", 
+            range(len(dept_names)), 
+            format_func=lambda i: dept_names[i], 
+            key="schedule_dept_select",
+            on_change=on_dept_change
+        )
         selected_dept_id = dept_ids[selected_dept_idx]
         selected_dept_name = dept_names[selected_dept_idx]
     else:
@@ -1909,9 +1921,27 @@ elif st.session_state.current_page == 'Generate Schedule':
 
     st.caption(f"**{len(dept_nurses)}** staff in **{selected_dept_name}**")
 
-    # --- Current Priorities Preview ---
-    st.caption(f"🎯 **Priorities:** Util: {st.session_state.schedule_weights['utilization']} | Fair: {st.session_state.schedule_weights['overall_fairness']} | Night: {st.session_state.schedule_weights['night_fairness']} | Weekend: {st.session_state.schedule_weights['weekend_fairness']}")
-    st.caption("Adjust these in **General Settings > Soft Constraints**.")
+    # --- Priority Balance Visualization ---
+    with st.container(border=True):
+        col_pb1, col_pb2 = st.columns([1, 1])
+        with col_pb1:
+            st.markdown("### ⚖️ Optimization Priorities")
+            st.write("The solver balances these objectives based on values defined in **Soft Constraints**.")
+            if st.button("⚙️ Edit Priorities", use_container_width=True):
+                st.session_state.current_page = 'Soft Constraints'
+                st.rerun()
+        
+        with col_pb2:
+            w = st.session_state.schedule_weights
+            st.caption(f"📈 Utilization (**{w['utilization']}**/10)")
+            st.progress(w['utilization'] / 10.0)
+            st.caption(f"⚖️ Overall Fairness (**{w['overall_fairness']}**/10)")
+            st.progress(w['overall_fairness'] / 10.0)
+            st.caption(f"🌙 Night Fairness (**{w['night_fairness']}**/10)")
+            st.progress(w['night_fairness'] / 10.0)
+            st.caption(f"🗓️ Weekend Fairness (**{w['weekend_fairness']}**/10)")
+            st.progress(w['weekend_fairness'] / 10.0)
+    st.markdown("<br>", unsafe_allow_html=True)
 
     if st.button("Generate Optimized Schedule", type="primary"):
         if not dept_nurses:
@@ -2139,7 +2169,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                             "name": name,
                             "start_date": roster_start.strftime("%Y-%m-%d"),
                             "end_date": roster_end.strftime("%Y-%m-%d"),
-                            "schedule_data": st.session_state.last_schedule
+                            "schedule_data": st.session_state.last_schedule,
+                            "department_id": selected_dept_id
                         }).execute()
                         notify("Saved to Cloud", detail=f"'{name}' has been securely saved to Supabase.", type="success")
                         st.rerun()
