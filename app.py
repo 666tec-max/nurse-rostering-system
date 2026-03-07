@@ -1003,6 +1003,18 @@ def edit_staff_dialog(staff_member):
             new_consec = st.number_input("Max Consecutive Days", min_value=1, max_value=14, value=staff_member.get('max_consecutive_work_days', 6))
             
         if st.form_submit_button("Save Changes", use_container_width=True):
+            # If the user changed the grade but left the ID as the old one, auto-generate a new ID
+            if new_grade != staff_member['grade'] and new_id == staff_member['employee_id']:
+                prefix = f"{new_grade}-"
+                max_num = 0
+                for n in st.session_state.nurses:
+                    n_id = n.get('employee_id', '')
+                    if n_id.startswith(prefix):
+                        suffix = n_id[len(prefix):]
+                        if suffix.isdigit():
+                            max_num = max(max_num, int(suffix))
+                new_id = f"{prefix}{max_num + 1:02d}"
+
             if new_id != staff_member['employee_id'] and any(n['employee_id'] == new_id for n in st.session_state.nurses):
                 st.error(f"Employee ID {new_id} already exists!")
                 return
