@@ -305,8 +305,38 @@ def save_data(table_name, file_path, data):
             
         elif table_name in ["nurses", "shifts", "skills", "leaves", "departments"]:
             # Standard UPSERT
-            # Use id as the primary key for matching
-            supabase.table(table_name).upsert(data).execute()
+            # Map logical table name "nurses" to physical table "staff"
+            actual_table = "staff" if table_name == "nurses" else table_name
+            
+            # Filter columns to only those present in the database to prevent PostgREST key mismatch crashes
+            table_columns = {
+                "staff": ["employee_id", "name", "grade", "leave_days", "skills", "department_id", "allow_night_shift", "max_consecutive_work_days"],
+                "shifts": ["id", "code", "name", "start", "end", "duration", "type", "color", "required_skills"],
+                "skills": ["id", "code", "name", "description", "color"],
+                "leaves": ["code", "name", "description", "color", "is_paid"],
+                "departments": ["id", "name", "description"]
+            }
+            allowed_keys = table_columns.get(actual_table, [])
+            
+            clean_data = []
+            for item in data:
+                clean_item = {}
+                for k in allowed_keys:
+                    if k == "employee_id":
+                        clean_item[k] = item.get("employee_id", item.get("id"))
+                    elif k == "required_skills":
+                        clean_item[k] = item.get(k, [])
+                    elif k == "leave_days":
+                        clean_item[k] = item.get(k, [])
+                    elif k == "skills":
+                        clean_item[k] = item.get(k, [])
+                    elif k == "description":
+                        clean_item[k] = item.get(k, "")
+                    else:
+                        clean_item[k] = item.get(k)
+                clean_data.append(clean_item)
+                
+            supabase.table(actual_table).upsert(clean_data).execute()
             cloud_success = True
             
     except Exception as e:
@@ -563,14 +593,13 @@ def render_manage_shifts():
                         save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
                         notify("Shift added successfully:", detail=f"{new_shift_code} - {new_shift_name} ({new_shift_type})")
                         
-                        # Clear form state and refresh
+                        # Clear form state
                         reset_form_keys(["new_shift_code", "new_shift_name", "new_shift_type", 
                                        "new_shift_s_h", "new_shift_s_m", "new_shift_e_h", 
                                        "new_shift_e_m", "new_shift_color"])
-                        st.rerun()
                 else:
                     notify("Add Shift Failed", detail="Code and Name are required.", type="warning")
-                    st.rerun()
+
 
     st.markdown("---")
     st.subheader("Available Shifts")
@@ -777,7 +806,7 @@ def render_manage_grades():
                             notify("Grade added successfully:", detail=f"'{new_g_code}' added to Level {i+1}")
                             # Clear form keys
                             reset_form_keys([f"new_g_code_{i}", f"new_g_name_{i}"])
-                            st.rerun()
+
             
             # Current Grades in this layer
             if layer:
@@ -845,10 +874,8 @@ def render_manage_leave_types():
                         # Clear form state and refresh
                         reset_form_keys(["new_leave_code", "new_leave_name", "new_leave_paid", 
                                        "new_leave_desc", "new_leave_color"])
-                        st.rerun()
                 else:
                     notify("Action Failed", detail="Code and Name are required.", type="warning")
-                    st.rerun()
 
     st.markdown("---")
     st.subheader("Current Leave Types")
@@ -1071,7 +1098,6 @@ def render_manage_staffs():
                             reset_form_keys(["add_staff_name", "add_staff_id", "add_staff_grade", 
                                            "add_staff_dept", "add_staff_skills", "add_staff_night", 
                                            "add_staff_consec"])
-                            st.rerun()
                         except Exception as e:
                             st.error(f"Error adding staff: {e}")
                 else:
@@ -1245,10 +1271,8 @@ def render_manage_skills():
                         
                         # Clear form keys
                         reset_form_keys(["new_skill_code", "new_skill_name", "new_skill_desc", "new_skill_color"])
-                        st.rerun()
                 else:
                     notify("Action Failed", detail="Code and Name are required.", type="warning")
-                    st.rerun()
 
     st.markdown("---")
     st.subheader("Available Skills")
@@ -1407,10 +1431,8 @@ def render_manage_departments():
                         
                         # Clear form keys
                         reset_form_keys(["new_dept_id", "new_dept_name"])
-                        st.rerun()
                 else:
                     notify("Action Failed", detail="ID and Name are required.", type="warning")
-                    st.rerun()
 
     st.markdown("---")
     st.subheader("Available Departments")
