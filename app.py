@@ -1984,13 +1984,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                 model.add_constraints()
                 status = model.solve_model()
                 
-                # Update persistent weights from current UI state
-                st.session_state.schedule_weights = {
-                    'utilization': w_util,
-                    'overall_fairness': w_fair,
-                    'night_fairness': w_night,
-                    'weekend_fairness': w_weekend
-                }
+                # Weights are already persistent in st.session_state.schedule_weights
                 
                 from ortools.sat.python import cp_model
                 if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
