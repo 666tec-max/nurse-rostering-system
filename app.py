@@ -971,7 +971,11 @@ def edit_staff_dialog(staff_member):
     st.write(f"Editing: **{staff_member['name']}** ({staff_member['employee_id']})")
     
     with st.form("edit_staff_form"):
-        new_name = st.text_input("Name", value=staff_member['name'])
+        c1, c2 = st.columns(2)
+        with c1:
+            new_name = st.text_input("Name", value=staff_member['name'])
+        with c2:
+            new_id = st.text_input("Employee ID", value=staff_member['employee_id'])
         
         # Grade
         all_grades = [g['code'] for layer in st.session_state.grades for g in layer]
@@ -999,7 +1003,12 @@ def edit_staff_dialog(staff_member):
             new_consec = st.number_input("Max Consecutive Days", min_value=1, max_value=14, value=staff_member.get('max_consecutive_work_days', 6))
             
         if st.form_submit_button("Save Changes", use_container_width=True):
+            if new_id != staff_member['employee_id'] and any(n['employee_id'] == new_id for n in st.session_state.nurses):
+                st.error(f"Employee ID {new_id} already exists!")
+                return
+                
             updates = {
+                "employee_id": new_id,
                 "name": new_name,
                 "grade": new_grade,
                 "department_id": dept_ids[new_dept_idx],
@@ -1082,7 +1091,7 @@ def render_manage_staffs():
             with c1:
                 add_name = st.text_input("Name", placeholder="Full Name", key="add_staff_name")
             with c2:
-                add_id = st.text_input("Employee ID", placeholder="e.g. EMP001", key="add_staff_id")
+                add_id = st.text_input("Employee ID", placeholder="Leave blank to auto-generate", key="add_staff_id")
             with c3:
                 all_grades = [g['code'] for layer in st.session_state.grades for g in layer]
                 add_grade = st.selectbox("Grade", all_grades if all_grades else ["RN"], key="add_staff_grade")
@@ -1104,6 +1113,18 @@ def render_manage_staffs():
                 add_consec = st.number_input("Max Consecutive Days", min_value=1, max_value=14, value=6, key="add_staff_consec")
                 
             if st.form_submit_button("Add Personnel", use_container_width=True):
+                # Auto-generate ID if left blank
+                if not add_id:
+                    prefix = f"{add_grade}-"
+                    max_num = 0
+                    for n in st.session_state.nurses:
+                        n_id = n.get('employee_id', '')
+                        if n_id.startswith(prefix):
+                            suffix = n_id[len(prefix):]
+                            if suffix.isdigit():
+                                max_num = max(max_num, int(suffix))
+                    add_id = f"{prefix}{max_num + 1:02d}"
+                
                 if add_name and add_id:
                     # Check if ID already exists in session state to prevent duplicates before DB call
                     if any(n['employee_id'] == add_id for n in st.session_state.nurses):
