@@ -300,6 +300,8 @@ def render_summary_page():
     """, unsafe_allow_html=True)
     
     if st.button("🚀 Enter the System", use_container_width=True, type="primary"):
+        if 'cookie_manager' in st.session_state:
+            st.session_state.cookie_manager.set('tutorial_completed', 'true', key="set_tutorial_completed")
         st.session_state.tutorial_active = False
         st.session_state.show_tutorial_summary = False
         st.rerun()

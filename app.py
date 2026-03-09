@@ -11,8 +11,18 @@ from supabase import create_client, Client
 import staff_db
 from professional_roster_component import professional_roster
 import tutorial_manager
+import extra_streamlit_components as stx
 
 st.set_page_config(page_title="Nurse Rostering System", layout="wide")
+
+# --- Persistent Tutorial State via Cookies ---
+cookie_manager = stx.CookieManager(key="tutorial_mgr")
+st.session_state.cookie_manager = cookie_manager
+
+is_completed = cookie_manager.get(cookie="tutorial_completed")
+if is_completed == "true" and not st.session_state.get("cookie_checked_flag"):
+    st.session_state.show_tutorial_landing = False
+    st.session_state.cookie_checked_flag = True
 
 # --- Initialize Tutorial ---
 tutorial_manager.initialize_tutorial_state()
@@ -2004,7 +2014,7 @@ with st.sidebar:
     st.markdown("---")
     
     # Persistent Start Tutorial button
-    if not st.session_state.get("tutorial_active") and not st.session_state.get("tutorial_finished") and not st.session_state.get("show_tutorial_landing"):
+    if not st.session_state.get("tutorial_active") and not st.session_state.get("show_tutorial_landing"):
         if st.sidebar.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
             st.session_state.show_tutorial_landing = False
