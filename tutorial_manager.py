@@ -76,8 +76,8 @@ def check_url_trigger():
     return False
 
 def initialize_tutorial_state():
-    """Initializes session state for the tutorial system."""
-    # Ensure all required keys exist
+    """Initializes session state for the tutorial system, loading from cookies if available."""
+    # Ensure all required keys exist in session state
     if 'completed_tutorials' not in st.session_state:
         st.session_state.completed_tutorials = set()
     if 'tutorial_active' not in st.session_state:
@@ -86,29 +86,92 @@ def initialize_tutorial_state():
         st.session_state.tutorial_finished = False
     if 'current_tutorial_module' not in st.session_state:
         st.session_state.current_tutorial_module = None
-    if 'current_tutorial_step' not in st.session_state:
-        st.session_state.current_tutorial_step = 0
-
-    # Logic to show the landing page
+    if 'tutorial_started' not in st.session_state:
+        st.session_state.tutorial_started = False
     if 'show_tutorial_landing' not in st.session_state:
-        # Default to True for everyone in a new session
         st.session_state.show_tutorial_landing = True
 
-    # Allow query param to FORCE it anytime (overrides everything)
+    # Load from cookies if cookie_manager is available
+    if 'cookie_manager' in st.session_state:
+        cm = st.session_state.cookie_manager
+        
+        # Load completed modules
+        visited_str = cm.get(cookie="visited_modules")
+        if visited_str:
+            visited_list = [m.strip() for m in visited_str.split(",") if m.strip()]
+            st.session_state.completed_tutorials = set(visited_list)
+            if len(st.session_state.completed_tutorials) > 0:
+                st.session_state.tutorial_started = True
+                st.session_state.show_tutorial_landing = False
+                
+        # Load finished status
+        finished = cm.get(cookie="tutorial_finished")
+        if finished == "true":
+            st.session_state.tutorial_finished = True
+            st.session_state.show_tutorial_landing = False
+
+        # Load started status
+        started = cm.get(cookie="tutorial_started")
+        if started == "true":
+            st.session_state.tutorial_started = True
+            st.session_state.show_tutorial_landing = False
+
+    # Force show landing if query param is set
     if st.query_params.get("tutorial") == "true":
         st.session_state.show_tutorial_landing = True
         st.session_state.tutorial_active = False
         st.session_state.current_tutorial_module = None
         st.session_state.tutorial_finished = False
+        st.session_state.tutorial_started = False
+
+def sync_state_to_cookies():
+    """Persists the current tutorial state to cookies."""
+    if 'cookie_manager' not in st.session_state:
+        return
+        
+    cm = st.session_state.cookie_manager
+    
+    # Save visited modules
+    visited_str = ",".join(list(st.session_state.completed_tutorials))
+    cm.set(cookie="visited_modules", value=visited_str, key="sync_visited")
+    
+    # Save flags
+    cm.set(cookie="tutorial_started", value="true" if st.session_state.tutorial_started else "false", key="sync_started")
+    cm.set(cookie="tutorial_finished", value="true" if st.session_state.tutorial_finished else "false", key="sync_finished")
+
+def add_visited_module(module_id):
+    """Adds a module to the visited list and syncs to cookies."""
+    # Map the display name/id to the tutorial module ID if needed
+    # (Checking if it's one of the 10 modules)
+    module_ids = [m['id'] for m in TUTORIAL_MODULES]
+    if module_id in module_ids and module_id not in st.session_state.completed_tutorials:
+        st.session_state.completed_tutorials.add(module_id)
+        st.session_state.tutorial_started = True
+        
+        # Check for auto-completion
+        if len(st.session_state.completed_tutorials) == len(TUTORIAL_MODULES):
+            st.session_state.tutorial_finished = True
+            
+        sync_state_to_cookies()
 
 def reset_tutorial():
-    """Resets the tutorial progress."""
+    """Resets the tutorial progress and clears cookies."""
     st.session_state.tutorial_active = True
     st.session_state.show_tutorial_landing = False
     st.session_state.current_tutorial_module = None
-    st.session_state.current_tutorial_step = 0
     st.session_state.completed_tutorials = set()
     st.session_state.tutorial_finished = False
+    st.session_state.tutorial_started = True # Force them to start again but from landing/menu
+    
+    # Clear cookies
+    if 'cookie_manager' in st.session_state:
+        cm = st.session_state.cookie_manager
+        cm.delete(cookie="visited_modules")
+        cm.delete(cookie="tutorial_started")
+        cm.delete(cookie="tutorial_finished")
+        cm.delete(cookie="tutorial_completed")
+    
+    st.rerun()
 
 def render_landing_page():
     """Renders the first-time visit landing page."""
@@ -166,14 +229,16 @@ def render_landing_page():
     with col2:
         if st.button("Start Tutorial →", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
+            st.session_state.tutorial_started = True
             st.session_state.show_tutorial_landing = False
+            sync_state_to_cookies()
             st.rerun()
     with col3:
         if st.button("Explore on Your Own →", use_container_width=True):
             st.session_state.show_tutorial_landing = False
             st.session_state.tutorial_active = False
-            # We explicitly do NOT set tutorial_finished to True here,
-            # so the persistent "Start Tutorial" button can appear.
+            st.session_state.tutorial_started = True
+            sync_state_to_cookies()
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -257,7 +322,7 @@ def render_tutorial_menu():
                 btn_label = f"{module['icon']}\n{status_emoji}{module['name']}"
                 
                 if st.button(btn_label, key=f"btn_{module['id']}", use_container_width=True):
-                    st.session_state.completed_tutorials.add(module['id'])
+                    add_visited_module(module['id'])
                     st.session_state.current_tutorial_module = module['id']
                     st.session_state.current_page = module['id']
                     st.rerun()
@@ -300,8 +365,125 @@ def render_summary_page():
     """, unsafe_allow_html=True)
     
     if st.button("🚀 Enter the System", use_container_width=True, type="primary"):
-        if 'cookie_manager' in st.session_state:
-            st.session_state.cookie_manager.set('tutorial_completed', 'true', key="set_tutorial_completed")
         st.session_state.tutorial_active = False
         st.session_state.show_tutorial_summary = False
         st.rerun()
+
+def render_sidebar_progress():
+    """Renders the sidebar progress bar or certificate button."""
+    total = len(TUTORIAL_MODULES)
+    visited = len(st.session_state.completed_tutorials)
+    
+    if st.session_state.tutorial_finished:
+        st.markdown("<div style='margin-bottom: 5px; font-weight: bold;'>🏅 Tutorial Certificate</div>", unsafe_allow_html=True)
+        if st.sidebar.button("View Certificate", use_container_width=True):
+            st.session_state.current_page = "Certificate"
+            st.session_state.tutorial_active = False
+            st.rerun()
+    else:
+        # Midway or skip users - show progress bar
+        progress_val = int((visited / total) * 10)
+        filled = "█" * progress_val
+        empty = "░" * (10 - progress_val)
+        
+        st.markdown(f"""
+            <div style='margin-bottom: 5px; font-size: 0.9rem;'>
+                <div style='font-weight: bold; margin-bottom: 5px;'>Tutorial Progress</div>
+                <div style='font-family: monospace; font-size: 1.1rem; letter-spacing: 2px;'>{filled}{empty}</div>
+                <div style='color: #666; margin-top: 2px;'>{visited} / {total} modules explored</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+def render_certificate():
+    """Renders the high-quality styled certificate page."""
+    st.balloons()
+    st.markdown("""
+        <style>
+        .cert-container {
+            background-color: white;
+            padding: 50px;
+            border: 15px solid #FFD700; /* Gold Border */
+            border-style: double;
+            text-align: center;
+            max-width: 800px;
+            margin: 40px auto;
+            color: #333;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .cert-container::before {
+            content: "🩺";
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 2rem;
+            opacity: 0.2;
+        }
+        .cert-container::after {
+            content: "🩺";
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 2rem;
+            opacity: 0.2;
+        }
+        .cert-header {
+            font-family: 'Playfair Display', serif;
+            font-size: 3rem;
+            color: #D4AF37;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+        .cert-sub {
+            font-size: 1.5rem;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+        .cert-name {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-decoration: underline;
+            margin: 20px 0;
+            color: #1E1E1E;
+        }
+        .cert-desc {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .cert-footer {
+            margin-top: 50px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #555;
+        }
+        .stButton > button {
+            max-width: 300px;
+            margin: 20px auto !important;
+        }
+        </style>
+        
+        <div class="cert-container">
+            <div class="cert-header">Certificate of Completion</div>
+            <div class="cert-sub">This certificate is proudly presented to</div>
+            <div class="cert-name">The User</div>
+            <div class="cert-desc">
+                for successfully exploring and completing<br>
+                all modules in the<br>
+                <b>Nurse Rostering System Tutorial</b>
+            </div>
+            <div class="cert-desc">
+                You have demonstrated a full understanding<br>
+                of the system structure and features.
+            </div>
+            <div class="cert-footer">
+                CONGRATULATIONS!
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🎉 Back to System", type="primary", use_container_width=True):
+            st.session_state.current_page = "Theme" # Default starting page
+            st.rerun()

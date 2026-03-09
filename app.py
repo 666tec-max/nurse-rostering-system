@@ -27,7 +27,6 @@ if is_completed == "true" and not st.session_state.get("cookie_checked_flag"):
 # --- Initialize Tutorial ---
 tutorial_manager.initialize_tutorial_state()
 
-# --- Tutorial Page Checks (Force show before anything else) ---
 if st.session_state.show_tutorial_landing:
     tutorial_manager.render_landing_page()
     st.stop()
@@ -35,6 +34,10 @@ if st.session_state.show_tutorial_landing:
 if st.session_state.get('show_tutorial_summary', False):
     tutorial_manager.render_summary_page()
     st.stop()
+
+# Universal Tutorial Visit Tracking
+if 'current_page' in st.session_state:
+    tutorial_manager.add_visited_module(st.session_state.current_page)
 
 if st.session_state.tutorial_active and st.session_state.current_tutorial_module is None:
     tutorial_manager.render_tutorial_menu()
@@ -399,10 +402,12 @@ DEFAULT_SKILLS = [
 
 st.title("Nurse Rostering System")
 
-if st.session_state.get('tutorial_active') and st.session_state.get('current_tutorial_module'):
+# Show Back to Tutorial Menu if we are in an active session and NOT on a special tutorial page
+if (st.session_state.get('tutorial_active') or (st.session_state.get('tutorial_started') and not st.session_state.get('tutorial_finished'))) and st.session_state.current_page not in ['Certificate', 'Generate Schedule']:
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     if st.button("⬅️ Back to Tutorial Menu", type="primary", use_container_width=True):
         st.session_state.current_tutorial_module = None
+        st.session_state.tutorial_active = True # Take them to the module menu
         st.rerun()
 
 show_notifications()
@@ -2013,6 +2018,11 @@ with st.sidebar:
 
     st.markdown("---")
     
+    # Tutorial Progress/Certificate Section
+    if st.session_state.get('tutorial_started') or st.session_state.get('tutorial_finished'):
+        tutorial_manager.render_sidebar_progress()
+        st.markdown("---")
+    
     # Persistent Start Tutorial button
     if not st.session_state.get("tutorial_active") and not st.session_state.get("show_tutorial_landing"):
         if st.sidebar.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
@@ -2029,7 +2039,9 @@ with st.sidebar:
 # Main Layout: Content
 # ---------------------------------------------------------------------
 
-if st.session_state.current_page == 'Theme':
+if st.session_state.current_page == 'Certificate':
+    tutorial_manager.render_certificate()
+elif st.session_state.current_page == 'Theme':
     st.header("Theme Settings")
     st.write("Choose a visual theme for the application.")
 
