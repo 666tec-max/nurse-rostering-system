@@ -4,16 +4,18 @@ import os
 
 # --- Tutorial Content Configuration ---
 TUTORIAL_MODULES = [
-    {"id": "Manage Departments", "name": "Departments", "icon": "🏢", "color": "#E8F4FD"},
-    {"id": "Manage Shifts", "name": "Shifts", "icon": "🗓️", "color": "#FFF4E6"},
-    {"id": "Manage Skills", "name": "Skills", "icon": "🔧", "color": "#F3F0FF"},
-    {"id": "Grades Hierarchy", "name": "Grades", "icon": "🏆", "color": "#FFF9DB"},
-    {"id": "Leave Types", "name": "Leave Types", "icon": "🏖️", "color": "#E6FFFA"},
-    {"id": "Manage Staffs", "name": "Staff", "icon": "👥", "color": "#F8F9FA"},
-    {"id": "Minimum Demand", "name": "Demand", "icon": "📊", "color": "#FFF5F5"},
+    # Top Row: System Settings / Theme & Constraints
     {"id": "Theme", "name": "Theme", "icon": "🎨", "color": "#F0F4F8"},
     {"id": "Hard Constraints", "name": "Hard Constraints", "icon": "🛡️", "color": "#E9ECEF"},
     {"id": "Soft Constraints", "name": "Soft Constraints", "icon": "⚖️", "color": "#FEFBF3"},
+    # Next Rows: Manage Modules
+    {"id": "Manage Shifts", "name": "Manage Shifts", "icon": "🗓️", "color": "#FFF4E6"},
+    {"id": "Manage Skills", "name": "Manage Skills", "icon": "🔧", "color": "#F3F0FF"},
+    {"id": "Grades Hierarchy", "name": "Manage Grade", "icon": "🏆", "color": "#FFF9DB"},
+    {"id": "Manage Departments", "name": "Manage Departments", "icon": "🏢", "color": "#E8F4FD"},
+    {"id": "Minimum Demand", "name": "Manage Demand", "icon": "📊", "color": "#FFF5F5"},
+    {"id": "Manage Staffs", "name": "Manage Staff", "icon": "👥", "color": "#F8F9FA"},
+    {"id": "Leave Types", "name": "Manage Leave Types", "icon": "🏖️", "color": "#E6FFFA"},
 ]
 
 TUTORIAL_STEPS = {
@@ -117,118 +119,138 @@ def render_landing_page():
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 70vh;
+            padding-top: 100px;
             text-align: center;
         }
         .landing-title {
             font-size: 3rem;
             font-weight: 800;
-            margin-bottom: 20px;
-            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            color: #1E1E1E;
         }
         .landing-subtitle {
-            font-size: 1.2rem;
-            color: #666;
-            margin-bottom: 40px;
-            max-width: 600px;
-        }
-        .landing-buttons {
-            display: flex;
-            gap: 20px;
+            font-size: 1.5rem;
+            color: #555;
+            margin-bottom: 50px;
         }
         </style>
         <div class="landing-container">
-            <div class="landing-title">Hello! Let’s Get Started with Nurse Rostering System.</div>
-            <div class="landing-subtitle">
-                Jump in and explore!
-            </div>
+            <div class="landing-title">Welcome to Nurse Rostering System</div>
+            <div class="landing-subtitle">Jump in and explore!</div>
         </div>
     """, unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
     with col2:
-        if st.button("✨ Start Tutorial", use_container_width=True, type="primary"):
+        if st.button("Start Tutorial →", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
             st.session_state.show_tutorial_landing = False
             st.rerun()
     with col3:
-        if st.button("🚀 Explore on Your Own", use_container_width=True):
+        if st.button("Explore on Your Own →", use_container_width=True):
             st.session_state.show_tutorial_landing = False
             st.session_state.tutorial_active = False
             st.rerun()
 
 def render_tutorial_menu():
     """Renders the grid of tutorial cards."""
-    st.header("Pick a Module to Master")
-    st.write("Each tutorial takes less than a minute. Complete them all to become a Pro!")
+    # Center-aligned title
+    st.markdown("<h1 style='text-align: center;'>Guided Tutorial Workflow</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.1rem; color: #666;'>Visit all modules to unlock the full app experience. Progress through each area to master the system.</p>", unsafe_allow_html=True)
+
+    # Progress Calculation
+    total_modules = len(TUTORIAL_MODULES)
+    completed_count = len(st.session_state.completed_tutorials)
+    progress_percentage = int((completed_count / total_modules) * 100)
+
+    # Progress Indicator
+    st.markdown(f"""
+        <div style="max-width: 600px; margin: 20px auto;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-weight: 600;">Overall Progress</span>
+                <span style="font-weight: 600;">{progress_percentage}%</span>
+            </div>
+            <div style="background-color: #EEE; border-radius: 10px; height: 12px; overflow: hidden;">
+                <div style="background: linear-gradient(90deg, #4ECDC4, #FF6B6B); width: {progress_percentage}%; height: 100%; transition: width 0.5s ease;"></div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
     # Custom CSS for playful cards
     st.markdown("""
         <style>
-        .tutorial-card {
-            padding: 20px;
-            border-radius: 15px;
-            border: 2px solid #F0F0F0;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            height: 180px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
+        .stButton > button {
+            height: 120px !important;
+            border-radius: 15px !important;
+            border: 2px solid #F0F0F0 !important;
+            transition: all 0.3s ease !important;
+            background: #FFF !important;
+            color: #333 !important;
+            padding: 10px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
-        .tutorial-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
-            border-color: #DDD;
+        .stButton > button:hover {
+            transform: translateY(-5px) !important;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05) !important;
+            border-color: #4ECDC4 !important;
         }
-        .tutorial-icon {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
+        .stButton > button p {
+            font-size: 1.1rem !important;
+            font-weight: 800 !important;
+            margin: 0 !important;
+            white-space: pre-wrap !important;
         }
-        .tutorial-name {
-            font-weight: 700;
-            font-size: 1.1rem;
+        .completed-btn {
+            border-color: #4CAF50 !important;
+            background: #F1FBF2 !important;
         }
-        .tutorial-status {
-            font-size: 0.8rem;
-            margin-top: 5px;
-            color: #4CAF50;
-            font-weight: 600;
+        .active-btn {
+            border-color: #4ECDC4 !important;
+            border-width: 3px !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    cols = st.columns(3)
-    for i, module in enumerate(TUTORIAL_MODULES):
-        with cols[i % 3]:
-            is_completed = module['id'] in st.session_state.completed_tutorials
-            status_text = "✅ Completed" if is_completed else ""
-            
-            # Use a container and button combination for interaction
-            # We use a button but style the container around it or use the button itself
-            if st.button(f"{module['icon']}\n\n{module['name']}\n{status_text}", 
-                         key=f"tutorial_card_{module['id']}", 
-                         use_container_width=True,
-                         help=f"Start {module['name']} Tutorial"):
-                st.session_state.current_tutorial_module = module['id']
-                st.session_state.current_tutorial_step = 0
-                st.session_state.current_page = module['id'] # Switch app page to match
-                st.rerun()
+    # Define Rows
+    rows = [
+        TUTORIAL_MODULES[0:3],   # Theme, Hard, Soft
+        TUTORIAL_MODULES[3:6],   # Shifts, Skills, Grade
+        TUTORIAL_MODULES[6:8],   # Dept, Demand
+        TUTORIAL_MODULES[8:10],  # Staff, Leave
+    ]
 
-    st.markdown("---")
-    if len(st.session_state.completed_tutorials) == len(TUTORIAL_MODULES):
-        st.success("🏆 You've completed every tutorial module! Ready to build rosters?")
-        if st.button("✨ Show Final Summary", use_container_width=True, type="primary"):
-            st.session_state.tutorial_finished = True
-            st.rerun()
-    else:
-        if st.button("Finish Tutorial & Start Using App", use_container_width=True, type="primary"):
+    for row_modules in rows:
+        margin_col_left, *cols, margin_col_right = st.columns([1] + [2] * len(row_modules) + [1])
+        for i, module in enumerate(row_modules):
+            with cols[i]:
+                is_completed = module['id'] in st.session_state.completed_tutorials
+                is_active = st.session_state.current_tutorial_module == module['id']
+                
+                status_emoji = "✅ " if is_completed else ""
+                btn_label = f"{module['icon']}\n{status_emoji}{module['name']}"
+                
+                if st.button(btn_label, key=f"btn_{module['id']}", use_container_width=True):
+                    st.session_state.current_tutorial_module = module['id']
+                    st.session_state.current_tutorial_step = 0
+                    st.session_state.current_page = module['id']
+                    st.rerun()
+
+    st.markdown("<div style='margin-bottom: 40px;'></div>", unsafe_allow_html=True)
+    
+    # Final Action Button
+    all_done = completed_count == total_modules
+    _, center_col, _ = st.columns([1, 2, 1])
+    with center_col:
+        if st.button("Finish Tutorial & Start Using App", 
+                     use_container_width=True, 
+                     type="primary", 
+                     disabled=not all_done,
+                     help="Visit all modules to unlock the app"):
             st.session_state.tutorial_active = False
+            st.session_state.tutorial_finished = True
             st.rerun()
 
 def render_tutorial_step():
