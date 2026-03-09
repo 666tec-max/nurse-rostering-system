@@ -36,7 +36,8 @@ if st.session_state.get('show_tutorial_summary', False):
     st.stop()
 
 # Automatic Tutorial Visit Tracking
-tutorial_manager.add_visited_module(st.session_state.current_page)
+if 'current_page' in st.session_state:
+    tutorial_manager.add_visited_module(st.session_state.current_page)
 
 if st.session_state.tutorial_active and st.session_state.current_tutorial_module is None:
     tutorial_manager.render_tutorial_menu()

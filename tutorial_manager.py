@@ -292,7 +292,7 @@ def render_landing_page():
     st.markdown('<div class="main-wrapper">', unsafe_allow_html=True)
     
     # Illustration
-    st.image("/Users/tec/Documents/trae_projects/3/lobby_illustration.png", width=400)
+    st.image("lobby_illustration.png", width=400)
     
     # Title & Subtitle
     st.markdown("""
