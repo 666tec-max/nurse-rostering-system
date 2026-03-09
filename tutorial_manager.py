@@ -133,11 +133,11 @@ def sync_state_to_cookies():
     
     # Save visited modules
     visited_str = ",".join(list(st.session_state.completed_tutorials))
-    cm.set(cookie="visited_modules", value=visited_str, key="sync_visited")
+    cm.set(cookie="visited_modules", val=visited_str, key="sync_visited")
     
     # Save flags
-    cm.set(cookie="tutorial_started", value="true" if st.session_state.tutorial_started else "false", key="sync_started")
-    cm.set(cookie="tutorial_finished", value="true" if st.session_state.tutorial_finished else "false", key="sync_finished")
+    cm.set(cookie="tutorial_started", val="true" if st.session_state.tutorial_started else "false", key="sync_started")
+    cm.set(cookie="tutorial_finished", val="true" if st.session_state.tutorial_finished else "false", key="sync_finished")
 
 def add_visited_module(module_id):
     """Adds a module to the visited list and syncs to cookies."""
