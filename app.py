@@ -35,9 +35,8 @@ if st.session_state.get('show_tutorial_summary', False):
     tutorial_manager.render_summary_page()
     st.stop()
 
-# Universal Tutorial Visit Tracking
-if 'current_page' in st.session_state:
-    tutorial_manager.add_visited_module(st.session_state.current_page)
+# Automatic Tutorial Visit Tracking
+tutorial_manager.add_visited_module(st.session_state.current_page)
 
 if st.session_state.tutorial_active and st.session_state.current_tutorial_module is None:
     tutorial_manager.render_tutorial_menu()
@@ -2036,8 +2035,15 @@ with st.sidebar:
         st.rerun()
 
 # ---------------------------------------------------------------------
-# Main Layout: Content
+# Main Layout: Content Tracking & Navigation
 # ---------------------------------------------------------------------
+
+# Show "Back to Tutorial Menu" if in tutorial mode and on a module page
+module_ids = [m['id'] for m in tutorial_manager.TUTORIAL_MODULES]
+if st.session_state.get('tutorial_active') and st.session_state.current_page in module_ids:
+    if st.button("⬅️ Back to Tutorial Menu", use_container_width=True):
+        st.session_state.current_tutorial_module = None
+        st.rerun()
 
 if st.session_state.current_page == 'Certificate':
     tutorial_manager.render_certificate()

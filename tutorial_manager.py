@@ -76,8 +76,8 @@ def check_url_trigger():
     return False
 
 def initialize_tutorial_state():
-    """Initializes session state for the tutorial system, loading from cookies if available."""
-    # Ensure all required keys exist in session state
+    """Initializes session state for the tutorial system, loading from a unified cookie if available."""
+    # 1. Base initialization
     if 'completed_tutorials' not in st.session_state:
         st.session_state.completed_tutorials = set()
     if 'tutorial_active' not in st.session_state:
@@ -90,54 +90,68 @@ def initialize_tutorial_state():
         st.session_state.tutorial_started = False
     if 'show_tutorial_landing' not in st.session_state:
         st.session_state.show_tutorial_landing = True
+    if 'certificate_earned_date' not in st.session_state:
+        st.session_state.certificate_earned_date = None
 
-    # Load from cookies if cookie_manager is available
+    # 2. Load from unified cookie
     if 'cookie_manager' in st.session_state:
         cm = st.session_state.cookie_manager
+        raw_state = cm.get(cookie="nurse_tutorial_state")
         
-        # Load completed modules
-        visited_str = cm.get(cookie="visited_modules")
-        if visited_str:
-            visited_list = [m.strip() for m in visited_str.split(",") if m.strip()]
-            st.session_state.completed_tutorials = set(visited_list)
-            if len(st.session_state.completed_tutorials) > 0:
-                st.session_state.tutorial_started = True
-                st.session_state.show_tutorial_landing = False
+        if raw_state:
+            try:
+                # Handle potential JSON parsing errors
+                if isinstance(raw_state, str):
+                    import json
+                    state = json.loads(raw_state)
+                else:
+                    state = raw_state
                 
-        # Load finished status
-        finished = cm.get(cookie="tutorial_finished")
-        if finished == "true":
-            st.session_state.tutorial_finished = True
-            st.session_state.show_tutorial_landing = False
+                # Validation: Ensure only valid module IDs are kept
+                valid_ids = {m['id'] for m in TUTORIAL_MODULES}
+                visited = [m for m in state.get("visited_modules", []) if m in valid_ids]
+                
+                st.session_state.completed_tutorials = set(visited)
+                st.session_state.tutorial_started = state.get("tutorial_started", False)
+                st.session_state.tutorial_finished = state.get("tutorial_finished", False)
+                st.session_state.certificate_earned_date = state.get("certificate_earned_date")
+                
+                # If they have progress or finished, skip landing
+                if st.session_state.tutorial_started or st.session_state.tutorial_finished or len(st.session_state.completed_tutorials) > 0:
+                    st.session_state.show_tutorial_landing = False
+            except Exception:
+                # If corruption occurs, we ignore the cookie but keep base state
+                pass
 
-        # Load started status
-        started = cm.get(cookie="tutorial_started")
-        if started == "true":
-            st.session_state.tutorial_started = True
-            st.session_state.show_tutorial_landing = False
-
-    # Force show landing if query param is set
+    # 3. Handle query param override
     if st.query_params.get("tutorial") == "true":
         st.session_state.show_tutorial_landing = True
         st.session_state.tutorial_active = False
         st.session_state.current_tutorial_module = None
         st.session_state.tutorial_finished = False
         st.session_state.tutorial_started = False
+        st.session_state.completed_tutorials = set()
 
 def sync_state_to_cookies():
-    """Persists the current tutorial state to cookies."""
+    """Persists all tutorial variables together in a single JSON cookie."""
     if 'cookie_manager' not in st.session_state:
         return
         
     cm = st.session_state.cookie_manager
     
-    # Save visited modules
-    visited_str = ",".join(list(st.session_state.completed_tutorials))
-    cm.set(cookie="visited_modules", val=visited_str, key="sync_visited")
+    state_obj = {
+        "visited_modules": list(st.session_state.completed_tutorials),
+        "tutorial_started": st.session_state.tutorial_started,
+        "tutorial_finished": st.session_state.tutorial_finished,
+        "certificate_earned_date": st.session_state.certificate_earned_date
+    }
     
-    # Save flags
-    cm.set(cookie="tutorial_started", val="true" if st.session_state.tutorial_started else "false", key="sync_started")
-    cm.set(cookie="tutorial_finished", val="true" if st.session_state.tutorial_finished else "false", key="sync_finished")
+    import json
+    cm.set(cookie="nurse_tutorial_state", val=json.dumps(state_obj), key="sync_state")
+    
+    # Also set a legacy compatible cookie for basic completed check if needed by other components
+    if st.session_state.tutorial_finished:
+        cm.set(cookie="tutorial_completed", val="true", key="sync_legacy")
 
 def add_visited_module(module_id):
     """Adds a module to the visited list and syncs to cookies."""
@@ -148,7 +162,8 @@ def add_visited_module(module_id):
         st.session_state.completed_tutorials.add(module_id)
         st.session_state.tutorial_started = True
         
-        # Check for auto-completion
+        # Sync immediately
+        sync_state_to_cookies()
         if len(st.session_state.completed_tutorials) == len(TUTORIAL_MODULES):
             st.session_state.tutorial_finished = True
             
@@ -408,9 +423,12 @@ def render_tutorial_menu():
                      type="primary", 
                      disabled=not all_done,
                      help="Visit all modules to unlock the app"):
+            import datetime
+            st.session_state.certificate_earned_date = datetime.datetime.now().strftime("%B %d, %Y")
             st.session_state.tutorial_active = False
             st.session_state.tutorial_finished = True
             st.session_state.show_tutorial_summary = True
+            sync_state_to_cookies()
             st.rerun()
 
 # render_tutorial_step removed as it is no longer needed in the new checklist flow
@@ -458,83 +476,100 @@ def render_sidebar_progress():
         
         st.markdown(f"""
             <div style='margin-bottom: 5px; font-size: 0.9rem;'>
-                <div style='font-weight: bold; margin-bottom: 5px;'>Tutorial Progress</div>
-                <div style='font-family: monospace; font-size: 1.1rem; letter-spacing: 2px;'>{filled}{empty}</div>
-                <div style='color: #666; margin-top: 2px;'>{visited} / {total} modules explored</div>
+                <div style='font-weight: bold; margin-bottom: 2px;'>Tutorial Progress</div>
+                <div style='margin-bottom: 5px; color: #555;'>{visited} / {total} modules explored</div>
+                <div style='font-family: monospace; font-size: 1.2rem; letter-spacing: 2px; color: #1E88E5;'>{filled}{empty}</div>
             </div>
         """, unsafe_allow_html=True)
 
 def render_certificate():
-    """Renders the high-quality styled certificate page."""
+    """Renders the high-quality styled certificate page with completion date and confetti."""
+    # Celebration effect
+    st.snow() # Streamlit built-in snowflake effect is nice, but balloons are better for a certificate
     st.balloons()
-    st.markdown("""
+    
+    completion_date = st.session_state.get('certificate_earned_date', "Today")
+    
+    st.markdown(f"""
         <style>
-        .cert-container {
+        .cert-container {{
             background-color: white;
-            padding: 50px;
-            border: 15px solid #FFD700; /* Gold Border */
+            padding: 60px;
+            border: 12px solid #D4AF37; /* Gold Border */
             border-style: double;
             text-align: center;
             max-width: 800px;
             margin: 40px auto;
             color: #333;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
             position: relative;
-        }
-        .cert-container::before {
-            content: "🩺";
+            font-family: 'Inter', sans-serif;
+        }}
+        .cert-container::before {{
+            content: "🏥";
             position: absolute;
             top: 20px;
             left: 20px;
-            font-size: 2rem;
-            opacity: 0.2;
-        }
-        .cert-container::after {
-            content: "🩺";
+            font-size: 2.5rem;
+            opacity: 0.15;
+        }}
+        .cert-container::after {{
+            content: "⚖️";
             position: absolute;
             bottom: 20px;
             right: 20px;
-            font-size: 2rem;
-            opacity: 0.2;
-        }
-        .cert-header {
+            font-size: 2.5rem;
+            opacity: 0.15;
+        }}
+        .cert-header {{
             font-family: 'Playfair Display', serif;
-            font-size: 3rem;
+            font-size: 3.5rem;
             color: #D4AF37;
             text-transform: uppercase;
-            margin-bottom: 20px;
-        }
-        .cert-sub {
-            font-size: 1.5rem;
-            font-style: italic;
             margin-bottom: 10px;
-        }
-        .cert-name {
-            font-size: 2.5rem;
+            letter-spacing: 2px;
+        }}
+        .cert-sub {{
+            font-size: 1.6rem;
+            font-style: italic;
+            margin-bottom: 15px;
+            color: #555;
+        }}
+        .cert-name {{
+            font-size: 2.8rem;
             font-weight: bold;
             text-decoration: underline;
-            margin: 20px 0;
+            margin: 25px 0;
             color: #1E1E1E;
-        }
-        .cert-desc {
-            font-size: 1.2rem;
+        }}
+        .cert-desc {{
+            font-size: 1.3rem;
             margin-bottom: 30px;
             line-height: 1.6;
-        }
-        .cert-footer {
-            margin-top: 50px;
-            font-size: 1.1rem;
+        }}
+        .cert-date {{
+            margin-top: 40px;
+            font-size: 1.2rem;
             font-weight: bold;
             color: #555;
-        }
-        .stButton > button {
+        }}
+        .cert-footer {{
+            margin-top: 20px;
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #D4AF37;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+        }}
+        .stButton > button {{
             max-width: 300px;
-            margin: 20px auto !important;
-        }
+            margin: 30px auto !important;
+            display: block;
+        }}
         </style>
         
         <div class="cert-container">
-            <div class="cert-header">Certificate of Completion</div>
+            <div class="cert-header">CERTIFICATE OF COMPLETION</div>
             <div class="cert-sub">This certificate is proudly presented to</div>
             <div class="cert-name">The User</div>
             <div class="cert-desc">
@@ -542,9 +577,8 @@ def render_certificate():
                 all modules in the<br>
                 <b>Nurse Rostering System Tutorial</b>
             </div>
-            <div class="cert-desc">
-                You have demonstrated a full understanding<br>
-                of the system structure and features.
+            <div class="cert-date">
+                Date of Completion: {completion_date}
             </div>
             <div class="cert-footer">
                 CONGRATULATIONS!
