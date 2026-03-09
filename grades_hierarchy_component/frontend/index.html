@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.4.0/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -400,37 +399,83 @@
 
     <script>
         // ══════════════════════════════════════
+        // IMMEDIATELY tell Streamlit we're ready (prevent timeout)
+        // ══════════════════════════════════════
+        Streamlit.setComponentReady();
+
+        // ══════════════════════════════════════
         // STATE
         // ══════════════════════════════════════
         let hierarchy = [];   // [[{code, name},...], ...]
         let pool = [];        // [{code, name}, ...]
         let sortableInstances = [];
-        let editContext = null; // {location: 'pool'|'layer', layerIdx, itemIdx}
+        let editContext = null;
+        let sortableLoaded = false;
+
+        // ══════════════════════════════════════
+        // DYNAMIC SORTABLE.JS LOADER
+        // ══════════════════════════════════════
+        function loadSortable(callback) {
+            if (typeof Sortable !== 'undefined') {
+                sortableLoaded = true;
+                callback();
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js';
+            script.onload = function() {
+                sortableLoaded = true;
+                callback();
+            };
+            script.onerror = function() {
+                console.warn('Sortable.js failed to load, drag-and-drop disabled');
+                sortableLoaded = false;
+                callback();
+            };
+            document.head.appendChild(script);
+        }
 
         // ══════════════════════════════════════
         // STREAMLIT COMMUNICATION
         // ══════════════════════════════════════
         function onStreamlitRender(event) {
-            const data = event.detail.args;
-            hierarchy = JSON.parse(JSON.stringify(data.hierarchy || []));
-            pool = JSON.parse(JSON.stringify(data.pool || []));
-            render();
+            try {
+                const data = event.detail.args;
+                hierarchy = JSON.parse(JSON.stringify(data.hierarchy || []));
+                pool = JSON.parse(JSON.stringify(data.pool || []));
+                
+                if (sortableLoaded) {
+                    render();
+                } else {
+                    loadSortable(function() { render(); });
+                }
+            } catch(e) {
+                console.error('Render error:', e);
+            }
         }
 
         function sendState() {
-            Streamlit.setComponentValue({
-                hierarchy: hierarchy,
-                pool: pool
-            });
+            try {
+                Streamlit.setComponentValue({
+                    hierarchy: hierarchy,
+                    pool: pool
+                });
+            } catch(e) {
+                console.error('sendState error:', e);
+            }
         }
 
         // ══════════════════════════════════════
         // RENDER
         // ══════════════════════════════════════
         function render() {
-            renderPyramid();
-            renderPool();
-            updateFrameHeight();
+            try {
+                renderPyramid();
+                renderPool();
+                updateFrameHeight();
+            } catch(e) {
+                console.error('render error:', e);
+            }
         }
 
         function renderPyramid() {
@@ -447,7 +492,6 @@
 
             for (let i = 0; i < total; i++) {
                 const layer = hierarchy[i];
-                // Width: top layer is narrowest, bottom is widest
                 const widthPct = total <= 1 ? 80 : 35 + (i / (total - 1)) * 55;
                 const colorClass = `layer-${Math.min(i, 7)}`;
 
@@ -466,29 +510,29 @@
                 html += `</div>`;
             }
 
-            // Bottom drop zone — drop here to create a new bottom layer
             html += `<div class="drop-zone-new" id="dropZoneBottom" data-position="bottom">↓ Drop here for new bottom layer</div>`;
 
             wrapper.innerHTML = html;
 
-            // Initialize Sortable on each layer
-            for (let i = 0; i < total; i++) {
-                const el = document.getElementById(`layer_${i}`);
-                if (el) {
-                    const s = new Sortable(el, {
-                        group: 'grades',
-                        animation: 200,
-                        ghostClass: 'sortable-ghost',
-                        chosenClass: 'sortable-chosen',
-                        draggable: '.grade-item',
-                        onEnd: onDragEnd,
-                        onAdd: onDragEnd,
-                    });
-                    sortableInstances.push(s);
+            // Initialize Sortable on each layer (only if loaded)
+            if (sortableLoaded && typeof Sortable !== 'undefined') {
+                for (let i = 0; i < total; i++) {
+                    const el = document.getElementById(`layer_${i}`);
+                    if (el) {
+                        const s = new Sortable(el, {
+                            group: 'grades',
+                            animation: 200,
+                            ghostClass: 'sortable-ghost',
+                            chosenClass: 'sortable-chosen',
+                            draggable: '.grade-item',
+                            onEnd: onDragEnd,
+                            onAdd: onDragEnd,
+                        });
+                        sortableInstances.push(s);
+                    }
                 }
             }
 
-            // Setup drop zones for new layers
             setupDropZone('dropZoneTop', 'top');
             setupDropZone('dropZoneBottom', 'bottom');
         }
@@ -512,26 +556,26 @@
             }
             el.innerHTML = html;
 
-            // Make pool sortable too
-            const poolSortable = new Sortable(el, {
-                group: 'grades',
-                animation: 200,
-                ghostClass: 'sortable-ghost',
-                chosenClass: 'sortable-chosen',
-                draggable: '.pool-item,.grade-item',
-                onEnd: onDragEnd,
-                onAdd: onDragEnd,
-            });
-            sortableInstances.push(poolSortable);
+            // Make pool sortable too (only if loaded)
+            if (sortableLoaded && typeof Sortable !== 'undefined') {
+                const poolSortable = new Sortable(el, {
+                    group: 'grades',
+                    animation: 200,
+                    ghostClass: 'sortable-ghost',
+                    chosenClass: 'sortable-chosen',
+                    draggable: '.pool-item,.grade-item',
+                    onEnd: onDragEnd,
+                    onAdd: onDragEnd,
+                });
+                sortableInstances.push(poolSortable);
+            }
         }
 
         // ══════════════════════════════════════
         // DRAG & DROP LOGIC
         // ══════════════════════════════════════
         function onDragEnd(evt) {
-            // Rebuild state from DOM
             rebuildStateFromDOM();
-            // Clean up empty layers
             hierarchy = hierarchy.filter(layer => layer.length > 0);
             sendState();
             render();
@@ -581,7 +625,6 @@
                 e.preventDefault();
                 zone.classList.remove('drag-over');
 
-                // Get the dragged item data from the Sortable ghost
                 const draggedEl = document.querySelector('.sortable-chosen') || document.querySelector('.sortable-ghost');
                 if (!draggedEl) return;
 
@@ -589,10 +632,8 @@
                 const name = draggedEl.dataset.name;
                 if (!code) return;
 
-                // Remove the item from its current location
                 removeGradeFromState(code);
 
-                // Create new layer
                 const newLayer = [{ code, name }];
                 if (position === 'top') {
                     hierarchy.unshift(newLayer);
@@ -600,9 +641,7 @@
                     hierarchy.push(newLayer);
                 }
 
-                // Remove the ghost element
                 draggedEl.remove();
-
                 sendState();
                 render();
             });
@@ -663,7 +702,6 @@
             const name = document.getElementById('modalName').value.trim();
             if (!code || !name) return;
 
-            // Check for duplicate code (excluding the item being edited)
             const allCodes = getAllCodes();
             if (editContext && editContext.oldCode) {
                 const idx = allCodes.indexOf(editContext.oldCode);
@@ -675,14 +713,12 @@
             }
 
             if (editContext) {
-                // Editing existing grade
                 if (editContext.location === 'pool') {
                     pool[editContext.itemIdx] = { code, name };
                 } else {
                     hierarchy[editContext.layerIdx][editContext.itemIdx] = { code, name };
                 }
             } else {
-                // Adding new grade to pool
                 pool.push({ code, name });
             }
 
@@ -697,7 +733,6 @@
             } else {
                 hierarchy[layerIdx].splice(itemIdx, 1);
             }
-            // Clean up empty layers
             hierarchy = hierarchy.filter(layer => layer.length > 0);
             sendState();
             render();
@@ -721,10 +756,12 @@
         // FRAME HEIGHT
         // ══════════════════════════════════════
         function updateFrameHeight() {
-            const h = document.querySelector('.main-container');
-            if (h) {
-                Streamlit.setFrameHeight(Math.max(h.scrollHeight + 24, 450));
-            }
+            try {
+                const h = document.querySelector('.main-container');
+                if (h) {
+                    Streamlit.setFrameHeight(Math.max(h.scrollHeight + 24, 450));
+                }
+            } catch(e) {}
         }
 
         // Handle Enter key in modal
@@ -738,10 +775,12 @@
         });
 
         // ══════════════════════════════════════
-        // INIT
+        // INIT — Load Sortable asynchronously, listen for renders
         // ══════════════════════════════════════
-        Streamlit.setComponentReady();
         Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onStreamlitRender);
+        loadSortable(function() {
+            // Sortable loaded (or failed gracefully), ready for renders
+        });
         setInterval(updateFrameHeight, 1000);
     </script>
 </body>
