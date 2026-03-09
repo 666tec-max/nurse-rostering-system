@@ -10,6 +10,34 @@ from model import NurseRosteringModel
 from supabase import create_client, Client
 import staff_db
 from professional_roster_component import professional_roster
+import tutorial_manager
+
+st.set_page_config(page_title="Nurse Rostering System", layout="wide")
+
+# --- Initialize Tutorial ---
+tutorial_manager.initialize_tutorial_state()
+
+# --- Tutorial Page Checks (Force show before anything else) ---
+if st.session_state.show_tutorial_landing:
+    tutorial_manager.render_landing_page()
+    st.stop()
+
+if st.session_state.tutorial_finished:
+    tutorial_manager.render_summary_page()
+    st.stop()
+
+if st.session_state.tutorial_active and st.session_state.current_tutorial_module is None:
+    tutorial_manager.render_tutorial_menu()
+    st.stop()
+
+# Temporary Debug Info - remove after fixing
+with st.sidebar.expander("🛠️ Tutorial Debug", expanded=True):
+    st.write(f"show_tutorial_landing: {st.session_state.get('show_tutorial_landing')}")
+    st.write(f"tutorial_active: {st.session_state.get('tutorial_active')}")
+    st.write(f"tutorial_finished: {st.session_state.get('tutorial_finished')}")
+    if st.button("Force Show Landing API"):
+         st.session_state.show_tutorial_landing = True
+         st.rerun()
 
 # --- Supabase Initialization ---
 try:
@@ -19,8 +47,6 @@ try:
 except Exception as e:
     st.error(f"Supabase configuration error: {e}")
     st.stop()
-
-st.set_page_config(page_title="Nurse Rostering System", layout="wide")
 
 # ---------------------------------------------------------------------
 # Theme Support
@@ -1893,6 +1919,11 @@ with st.sidebar:
         st.button("🏖️ Leave Types", on_click=lambda: st.session_state.update(current_page='Leave Types'), use_container_width=True)
         st.button("👥 Manage Staffs", on_click=lambda: st.session_state.update(current_page='Manage Staffs'), use_container_width=True)
         st.button("📊 Minimum Demand", on_click=lambda: st.session_state.update(current_page='Minimum Demand'), use_container_width=True)
+
+    st.markdown("---")
+    if st.sidebar.button("✨ Reset Tutorial", use_container_width=True):
+        tutorial_manager.reset_tutorial()
+        st.rerun()
 
 # ---------------------------------------------------------------------
 # Main Layout: Content
