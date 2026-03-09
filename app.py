@@ -30,14 +30,7 @@ if st.session_state.tutorial_active and st.session_state.current_tutorial_module
     tutorial_manager.render_tutorial_menu()
     st.stop()
 
-# Temporary Debug Info - remove after fixing
-with st.sidebar.expander("🛠️ Tutorial Debug", expanded=True):
-    st.write(f"show_tutorial_landing: {st.session_state.get('show_tutorial_landing')}")
-    st.write(f"tutorial_active: {st.session_state.get('tutorial_active')}")
-    st.write(f"tutorial_finished: {st.session_state.get('tutorial_finished')}")
-    if st.button("Force Show Landing API"):
-         st.session_state.show_tutorial_landing = True
-         st.rerun()
+
 
 # --- Supabase Initialization ---
 try:
