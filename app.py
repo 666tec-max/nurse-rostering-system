@@ -10,6 +10,7 @@ from model import NurseRosteringModel
 from supabase import create_client, Client
 import staff_db
 from professional_roster_component import professional_roster
+from grades_hierarchy_component import grades_hierarchy
 import tutorial_manager
 
 st.set_page_config(page_title="Nurse Rostering System", layout="wide")
@@ -468,6 +469,9 @@ if 'grades' not in st.session_state:
     else:
         st.session_state.grades = raw_grades
 
+if 'grades_pool' not in st.session_state:
+    st.session_state.grades_pool = []
+
 if 'leaves' not in st.session_state:
     DEFAULT_LEAVES = [
         {"code": "AL", "name": "Annual Leave", "description": "Paid annual vacation", "color": "#E6FFFA", "is_paid": True},
@@ -778,126 +782,26 @@ def render_manage_shifts():
 
 def render_manage_grades():
     st.subheader("Grades Hierarchy")
-    st.write("Higher layers represent more senior grades. Seniors can cover junior shifts.")
+    st.write("Drag grades between layers and the pool to build your seniority pyramid. Higher layers = more senior. Seniors can cover junior shifts.")
 
-    # --- Visual Pyramid Representation ---
-    st.markdown("""
-    <style>
-    .pyramid-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-        margin: 20px 0;
-    }
-    .pyramid-layer {
-        padding: 15px;
-        text-align: center;
-        border-radius: 8px;
-        background: #FEFBF3;
-        border: 2px solid #E0D6C3;
-        color: #5C5040;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .pyramid-layer:hover {
-        transform: scale(1.02);
-        border-color: #D4C9B4;
-    }
-    .grade-badge {
-        display: inline-block;
-        background: #FDF6E3;
-        border: 1px solid #D4C9B4;
-        padding: 2px 8px;
-        border-radius: 4px;
-        margin: 2px;
-        font-weight: bold;
-        font-family: monospace;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # --- Interactive Drag-and-Drop Component ---
+    result = grades_hierarchy(
+        hierarchy=st.session_state.grades,
+        pool=st.session_state.grades_pool,
+        key="grades_dnd"
+    )
 
-    with st.container():
-        st.markdown('<div class="pyramid-container">', unsafe_allow_html=True)
-        for i, layer in enumerate(st.session_state.grades):
-            # Calculate width based on layer index (top is narrowest)
-            width = 40 + (i * 15)
-            grades_html = " ".join([f'<span class="grade-badge">{g["code"]}</span>' for g in layer])
-            st.markdown(f'<div class="pyramid-layer" style="width: {width}%; font-size: {1.2 + (i*0.1)}rem;">'
-                        f'<strong>Level {i+1}</strong><br>{grades_html}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Handle return value from component
+    if result is not None:
+        new_hierarchy = result.get('hierarchy', [])
+        new_pool = result.get('pool', [])
 
-    st.markdown("---")
-
-    # --- Management UI ---
-    col_add, col_rem = st.columns(2)
-    with col_add:
-        if st.button("➕ Add Layer to Bottom", use_container_width=True):
-            st.session_state.grades.append([])
+        # Check if state actually changed
+        if new_hierarchy != st.session_state.grades or new_pool != st.session_state.grades_pool:
+            st.session_state.grades = new_hierarchy
+            st.session_state.grades_pool = new_pool
             save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-            notify("Layer added successfully:", detail="New empty level added to bottom")
             st.rerun()
-    with col_rem:
-        if len(st.session_state.grades) > 1:
-            if st.button("➖ Remove Bottom Layer", use_container_width=True):
-                # Move grades from bottom layer to the one above before deleting if needed? 
-                # For now just delete if empty or warning.
-                if not st.session_state.grades[-1] or st.button("Confirm Delete Non-Empty Layer"):
-                    st.session_state.grades.pop()
-                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-                    notify("Layer removed successfully:", detail="Bottom level deleted")
-                    st.rerun()
-
-    st.subheader("Edit Layers")
-    for i, layer in enumerate(st.session_state.grades):
-        with st.expander(f"Level {i+1} Management", expanded=(i==0)):
-            # Add Grade to this layer
-            with st.form(f"add_g_form_{i}", clear_on_submit=True):
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col1:
-                    new_g_code = st.text_input("Code", key=f"new_g_code_{i}", max_chars=5)
-                with col2:
-                    new_g_name = st.text_input("Full Name", key=f"new_g_name_{i}")
-                with col3:
-                    st.write("") # Spacer
-                    st.write("") # Spacer
-                    if st.form_submit_button("Add Grade", use_container_width=True):
-                        if new_g_code and new_g_name:
-                            st.session_state.grades[i].append({"code": new_g_code, "name": new_g_name})
-                            save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-                            notify("Grade added successfully:", detail=f"'{new_g_code}' added to Level {i+1}")
-                            # Clear form keys
-                            reset_form_keys([f"new_g_code_{i}", f"new_g_name_{i}"])
-
-            
-            # Current Grades in this layer
-            if layer:
-                st.write("Current Grades:")
-                for j, grade in enumerate(layer):
-                    c1, c2, c3 = st.columns([1, 3, 1])
-                    c1.code(grade['code'])
-                    c2.write(grade['name'])
-                    if c3.button("🗑️", key=f"del_g_{i}_{j}"):
-                        deleted_grade = st.session_state.grades[i][j]['code']
-                        st.session_state.grades[i].pop(j)
-                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-                        notify("Grade deleted successfully:", detail=f"'{deleted_grade}' removed")
-                        st.rerun()
-
-            # Move layer up/down
-            m1, m2 = st.columns(2)
-            if i > 0:
-                if m1.button(f"⬆️ Move Level {i+1} Up", key=f"up_layer_{i}"):
-                    st.session_state.grades[i-1], st.session_state.grades[i] = st.session_state.grades[i], st.session_state.grades[i-1]
-                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-                    notify("Layer moved successfully:", detail=f"Level {i+1} shifted up")
-                    st.rerun()
-            if i < len(st.session_state.grades) - 1:
-                if m2.button(f"⬇️ Move Level {i+1} Down", key=f"down_layer_{i}"):
-                    st.session_state.grades[i], st.session_state.grades[i+1] = st.session_state.grades[i+1], st.session_state.grades[i]
-                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
-                    notify("Layer moved successfully:", detail=f"Level {i+1} shifted down")
-                    st.rerun()
 
 
 def render_manage_leave_types():

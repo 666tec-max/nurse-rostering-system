@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.4.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: #FAFAFA;
+            color: #1a1a2e;
+            overflow: hidden;
+        }
+        .main-container {
+            display: flex;
+            gap: 16px;
+            padding: 12px;
+            min-height: 400px;
+        }
+        /* ═══════════════════════════════
+           PYRAMID AREA (LEFT 70%)
+           ═══════════════════════════════ */
+        .pyramid-area {
+            flex: 7;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+            border-radius: 16px;
+            padding: 20px 16px 24px;
+            border: 1px solid #e0e4ef;
+            position: relative;
+        }
+        .pyramid-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #7c83a8;
+            margin-bottom: 16px;
+        }
+        .pyramid-wrapper {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .drop-zone-new {
+            width: 30%;
+            min-height: 32px;
+            border: 2px dashed #c5cbe8;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: #9ba3c7;
+            transition: all 0.25s ease;
+            cursor: default;
+        }
+        .drop-zone-new.drag-over {
+            border-color: #6c63ff;
+            background: #eef0ff;
+            color: #6c63ff;
+            transform: scale(1.03);
+        }
+        .pyramid-layer {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 2px solid transparent;
+            min-height: 42px;
+            transition: all 0.25s ease;
+            position: relative;
+        }
+        .pyramid-layer.sortable-ghost-class {
+            opacity: 0.5;
+        }
+        .pyramid-layer.drag-over {
+            border-color: #6c63ff;
+            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
+        }
+        .layer-label {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .pyramid-layer-empty {
+            font-size: 0.72rem;
+            color: #aab0cf;
+            font-style: italic;
+        }
+        /* Grade badge inside pyramid */
+        .grade-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.78rem;
+            cursor: grab;
+            transition: all 0.2s ease;
+            border: 1.5px solid rgba(0,0,0,0.08);
+            white-space: nowrap;
+            user-select: none;
+        }
+        .grade-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        }
+        .grade-item:active {
+            cursor: grabbing;
+        }
+        .grade-item .code {
+            font-family: 'SF Mono', 'JetBrains Mono', monospace;
+            font-weight: 700;
+        }
+        .grade-item .name {
+            font-weight: 500;
+            opacity: 0.85;
+        }
+        .sortable-ghost {
+            opacity: 0.4 !important;
+        }
+        .sortable-chosen {
+            box-shadow: 0 6px 20px rgba(108, 99, 255, 0.3) !important;
+            transform: scale(1.05);
+        }
+
+        /* ═══════════════════════════════
+           GRADE POOL (RIGHT 30%)
+           ═══════════════════════════════ */
+        .pool-area {
+            flex: 3;
+            background: #fff;
+            border-radius: 16px;
+            border: 1px solid #e4e7ef;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        }
+        .pool-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .pool-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #7c83a8;
+        }
+        .btn-add {
+            background: linear-gradient(135deg, #6c63ff, #5a52e0);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-add:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(108, 99, 255, 0.35);
+        }
+        .pool-list {
+            flex: 1;
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px;
+            border: 2px dashed #e4e7ef;
+            border-radius: 10px;
+            transition: all 0.25s ease;
+            overflow-y: auto;
+        }
+        .pool-list.drag-over {
+            border-color: #6c63ff;
+            background: #f5f4ff;
+        }
+        .pool-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: #f7f8fc;
+            border: 1.5px solid #e4e7ef;
+            border-radius: 8px;
+            cursor: grab;
+            transition: all 0.2s ease;
+        }
+        .pool-item:hover {
+            border-color: #c5cbe8;
+            background: #eff1fa;
+        }
+        .pool-item .code {
+            font-family: 'SF Mono', 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 0.78rem;
+            background: #6c63ff22;
+            color: #5a52e0;
+            padding: 2px 8px;
+            border-radius: 5px;
+        }
+        .pool-item .name {
+            flex: 1;
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+        .pool-item-actions {
+            display: flex;
+            gap: 2px;
+        }
+        .btn-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            opacity: 0.5;
+        }
+        .btn-icon:hover {
+            background: #e4e7ef;
+            opacity: 1;
+        }
+        .pool-empty {
+            font-size: 0.75rem;
+            color: #aab0cf;
+            text-align: center;
+            padding: 16px;
+            font-style: italic;
+        }
+
+        /* ═══════════════════════════════
+           MODAL
+           ═══════════════════════════════ */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(3px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            width: 320px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            animation: modalIn 0.2s ease;
+        }
+        @keyframes modalIn {
+            from { transform: scale(0.95) translateY(10px); opacity: 0; }
+            to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .modal-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #1a1a2e;
+        }
+        .modal-field {
+            margin-bottom: 12px;
+        }
+        .modal-field label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #7c83a8;
+            margin-bottom: 4px;
+        }
+        .modal-field input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1.5px solid #e0e4ef;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .modal-field input:focus {
+            border-color: #6c63ff;
+            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
+        }
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .modal-btn {
+            flex: 1;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1.5px solid transparent;
+        }
+        .modal-btn.primary {
+            background: linear-gradient(135deg, #6c63ff, #5a52e0);
+            color: #fff;
+        }
+        .modal-btn.primary:hover { box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3); }
+        .modal-btn.secondary {
+            background: #f0f2f8;
+            color: #555;
+            border-color: #e0e4ef;
+        }
+        .modal-btn.secondary:hover { background: #e4e7ef; }
+        .modal-btn.danger {
+            background: #fff0f0;
+            color: #e53e3e;
+            border-color: #fecaca;
+        }
+        .modal-btn.danger:hover { background: #fee2e2; }
+
+        /* Layer color palette — top is darkest, lightens downward */
+        .layer-0 { background: #3b3486; } .layer-0 .grade-item { background: rgba(255,255,255,0.92); color: #3b3486; }
+        .layer-1 { background: #5a52b0; } .layer-1 .grade-item { background: rgba(255,255,255,0.92); color: #5a52b0; }
+        .layer-2 { background: #7b74d4; } .layer-2 .grade-item { background: rgba(255,255,255,0.90); color: #7b74d4; }
+        .layer-3 { background: #9d98e0; } .layer-3 .grade-item { background: rgba(255,255,255,0.88); color: #7b74d4; }
+        .layer-4 { background: #bfbdec; } .layer-4 .grade-item { background: rgba(255,255,255,0.86); color: #7b74d4; }
+        .layer-5 { background: #d6d4f2; } .layer-5 .grade-item { background: rgba(255,255,255,0.85); color: #7b74d4; }
+        .layer-6 { background: #e8e7f8; } .layer-6 .grade-item { background: rgba(255,255,255,0.85); color: #7b74d4; }
+        .layer-7 { background: #f0effe; } .layer-7 .grade-item { background: rgba(255,255,255,0.85); color: #7b74d4; }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Pyramid Area -->
+        <div class="pyramid-area">
+            <div class="pyramid-title">📐 Seniority Pyramid</div>
+            <div class="pyramid-wrapper" id="pyramidWrapper">
+                <!-- Rendered dynamically -->
+            </div>
+        </div>
+
+        <!-- Grade Pool -->
+        <div class="pool-area">
+            <div class="pool-header">
+                <span class="pool-title">🎯 Grade Pool</span>
+                <button class="btn-add" onclick="openAddModal()">➕ Add</button>
+            </div>
+            <div class="pool-list" id="poolList">
+                <!-- Rendered dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-box">
+            <div class="modal-title" id="modalTitle">Add Grade</div>
+            <div class="modal-field">
+                <label for="modalCode">Code</label>
+                <input type="text" id="modalCode" placeholder="e.g. SN" maxlength="5">
+            </div>
+            <div class="modal-field">
+                <label for="modalName">Full Name</label>
+                <input type="text" id="modalName" placeholder="e.g. Senior Nurse">
+            </div>
+            <div class="modal-actions" id="modalActions">
+                <!-- Buttons injected dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ══════════════════════════════════════
+        // STATE
+        // ══════════════════════════════════════
+        let hierarchy = [];   // [[{code, name},...], ...]
+        let pool = [];        // [{code, name}, ...]
+        let sortableInstances = [];
+        let editContext = null; // {location: 'pool'|'layer', layerIdx, itemIdx}
+
+        // ══════════════════════════════════════
+        // STREAMLIT COMMUNICATION
+        // ══════════════════════════════════════
+        function onStreamlitRender(event) {
+            const data = event.detail.args;
+            hierarchy = JSON.parse(JSON.stringify(data.hierarchy || []));
+            pool = JSON.parse(JSON.stringify(data.pool || []));
+            render();
+        }
+
+        function sendState() {
+            Streamlit.setComponentValue({
+                hierarchy: hierarchy,
+                pool: pool
+            });
+        }
+
+        // ══════════════════════════════════════
+        // RENDER
+        // ══════════════════════════════════════
+        function render() {
+            renderPyramid();
+            renderPool();
+            updateFrameHeight();
+        }
+
+        function renderPyramid() {
+            const wrapper = document.getElementById('pyramidWrapper');
+            // Destroy old sortable instances
+            sortableInstances.forEach(s => { try { s.destroy(); } catch(e){} });
+            sortableInstances = [];
+
+            let html = '';
+            const total = hierarchy.length;
+
+            // Top drop zone — drop here to create a new top layer
+            html += `<div class="drop-zone-new" id="dropZoneTop" data-position="top">↑ Drop here for new top layer</div>`;
+
+            for (let i = 0; i < total; i++) {
+                const layer = hierarchy[i];
+                // Width: top layer is narrowest, bottom is widest
+                const widthPct = total <= 1 ? 80 : 35 + (i / (total - 1)) * 55;
+                const colorClass = `layer-${Math.min(i, 7)}`;
+
+                html += `<div class="pyramid-layer ${colorClass}" id="layer_${i}" style="width: ${widthPct}%;" data-layer="${i}">`;
+                html += `<span class="layer-label">L${i + 1}</span>`;
+                if (layer.length === 0) {
+                    html += `<span class="pyramid-layer-empty">Empty — drag grades here</span>`;
+                } else {
+                    layer.forEach((g, gi) => {
+                        html += `<div class="grade-item" data-code="${g.code}" data-name="${g.name}" data-layer="${i}" data-idx="${gi}">`;
+                        html += `<span class="code">${g.code}</span>`;
+                        html += `<span class="name">${g.name}</span>`;
+                        html += `</div>`;
+                    });
+                }
+                html += `</div>`;
+            }
+
+            // Bottom drop zone — drop here to create a new bottom layer
+            html += `<div class="drop-zone-new" id="dropZoneBottom" data-position="bottom">↓ Drop here for new bottom layer</div>`;
+
+            wrapper.innerHTML = html;
+
+            // Initialize Sortable on each layer
+            for (let i = 0; i < total; i++) {
+                const el = document.getElementById(`layer_${i}`);
+                if (el) {
+                    const s = new Sortable(el, {
+                        group: 'grades',
+                        animation: 200,
+                        ghostClass: 'sortable-ghost',
+                        chosenClass: 'sortable-chosen',
+                        draggable: '.grade-item',
+                        onEnd: onDragEnd,
+                        onAdd: onDragEnd,
+                    });
+                    sortableInstances.push(s);
+                }
+            }
+
+            // Setup drop zones for new layers
+            setupDropZone('dropZoneTop', 'top');
+            setupDropZone('dropZoneBottom', 'bottom');
+        }
+
+        function renderPool() {
+            const el = document.getElementById('poolList');
+            let html = '';
+            if (pool.length === 0) {
+                html = '<div class="pool-empty">No unassigned grades.<br>Click ➕ Add to create one.</div>';
+            } else {
+                pool.forEach((g, i) => {
+                    html += `<div class="pool-item" data-code="${g.code}" data-name="${g.name}" data-pool-idx="${i}">`;
+                    html += `<span class="code">${g.code}</span>`;
+                    html += `<span class="name">${g.name}</span>`;
+                    html += `<div class="pool-item-actions">`;
+                    html += `<button class="btn-icon" onclick="openEditModal('pool', -1, ${i})" title="Edit">✏️</button>`;
+                    html += `<button class="btn-icon" onclick="deleteGrade('pool', -1, ${i})" title="Delete">🗑️</button>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                });
+            }
+            el.innerHTML = html;
+
+            // Make pool sortable too
+            const poolSortable = new Sortable(el, {
+                group: 'grades',
+                animation: 200,
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
+                draggable: '.pool-item,.grade-item',
+                onEnd: onDragEnd,
+                onAdd: onDragEnd,
+            });
+            sortableInstances.push(poolSortable);
+        }
+
+        // ══════════════════════════════════════
+        // DRAG & DROP LOGIC
+        // ══════════════════════════════════════
+        function onDragEnd(evt) {
+            // Rebuild state from DOM
+            rebuildStateFromDOM();
+            // Clean up empty layers
+            hierarchy = hierarchy.filter(layer => layer.length > 0);
+            sendState();
+            render();
+        }
+
+        function rebuildStateFromDOM() {
+            const newHierarchy = [];
+            const total = hierarchy.length;
+            for (let i = 0; i < total; i++) {
+                const el = document.getElementById(`layer_${i}`);
+                if (!el) continue;
+                const layerGrades = [];
+                el.querySelectorAll('.grade-item, .pool-item').forEach(item => {
+                    layerGrades.push({
+                        code: item.dataset.code,
+                        name: item.dataset.name
+                    });
+                });
+                newHierarchy.push(layerGrades);
+            }
+
+            const poolEl = document.getElementById('poolList');
+            const newPool = [];
+            poolEl.querySelectorAll('.grade-item, .pool-item').forEach(item => {
+                newPool.push({
+                    code: item.dataset.code,
+                    name: item.dataset.name
+                });
+            });
+
+            hierarchy = newHierarchy;
+            pool = newPool;
+        }
+
+        function setupDropZone(id, position) {
+            const zone = document.getElementById(id);
+            if (!zone) return;
+
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('drag-over');
+            });
+            zone.addEventListener('dragleave', () => {
+                zone.classList.remove('drag-over');
+            });
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+
+                // Get the dragged item data from the Sortable ghost
+                const draggedEl = document.querySelector('.sortable-chosen') || document.querySelector('.sortable-ghost');
+                if (!draggedEl) return;
+
+                const code = draggedEl.dataset.code;
+                const name = draggedEl.dataset.name;
+                if (!code) return;
+
+                // Remove the item from its current location
+                removeGradeFromState(code);
+
+                // Create new layer
+                const newLayer = [{ code, name }];
+                if (position === 'top') {
+                    hierarchy.unshift(newLayer);
+                } else {
+                    hierarchy.push(newLayer);
+                }
+
+                // Remove the ghost element
+                draggedEl.remove();
+
+                sendState();
+                render();
+            });
+        }
+
+        function removeGradeFromState(code) {
+            for (let i = 0; i < hierarchy.length; i++) {
+                hierarchy[i] = hierarchy[i].filter(g => g.code !== code);
+            }
+            pool = pool.filter(g => g.code !== code);
+        }
+
+        // ══════════════════════════════════════
+        // ADD / EDIT / DELETE
+        // ══════════════════════════════════════
+        function openAddModal() {
+            editContext = null;
+            document.getElementById('modalTitle').textContent = 'Add Grade';
+            document.getElementById('modalCode').value = '';
+            document.getElementById('modalName').value = '';
+            document.getElementById('modalCode').readOnly = false;
+            document.getElementById('modalActions').innerHTML = `
+                <button class="modal-btn secondary" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="saveModal()">Add</button>
+            `;
+            document.getElementById('modalOverlay').classList.add('active');
+            setTimeout(() => document.getElementById('modalCode').focus(), 100);
+        }
+
+        function openEditModal(location, layerIdx, itemIdx) {
+            let grade;
+            if (location === 'pool') {
+                grade = pool[itemIdx];
+            } else {
+                grade = hierarchy[layerIdx][itemIdx];
+            }
+            editContext = { location, layerIdx, itemIdx, oldCode: grade.code };
+            document.getElementById('modalTitle').textContent = 'Edit Grade';
+            document.getElementById('modalCode').value = grade.code;
+            document.getElementById('modalName').value = grade.name;
+            document.getElementById('modalCode').readOnly = false;
+            document.getElementById('modalActions').innerHTML = `
+                <button class="modal-btn secondary" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn danger" onclick="deleteFromModal()">Delete</button>
+                <button class="modal-btn primary" onclick="saveModal()">Save</button>
+            `;
+            document.getElementById('modalOverlay').classList.add('active');
+            setTimeout(() => document.getElementById('modalName').focus(), 100);
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+            editContext = null;
+        }
+
+        function saveModal() {
+            const code = document.getElementById('modalCode').value.trim().toUpperCase();
+            const name = document.getElementById('modalName').value.trim();
+            if (!code || !name) return;
+
+            // Check for duplicate code (excluding the item being edited)
+            const allCodes = getAllCodes();
+            if (editContext && editContext.oldCode) {
+                const idx = allCodes.indexOf(editContext.oldCode);
+                if (idx !== -1) allCodes.splice(idx, 1);
+            }
+            if (allCodes.includes(code)) {
+                alert('A grade with this code already exists!');
+                return;
+            }
+
+            if (editContext) {
+                // Editing existing grade
+                if (editContext.location === 'pool') {
+                    pool[editContext.itemIdx] = { code, name };
+                } else {
+                    hierarchy[editContext.layerIdx][editContext.itemIdx] = { code, name };
+                }
+            } else {
+                // Adding new grade to pool
+                pool.push({ code, name });
+            }
+
+            closeModal();
+            sendState();
+            render();
+        }
+
+        function deleteGrade(location, layerIdx, itemIdx) {
+            if (location === 'pool') {
+                pool.splice(itemIdx, 1);
+            } else {
+                hierarchy[layerIdx].splice(itemIdx, 1);
+            }
+            // Clean up empty layers
+            hierarchy = hierarchy.filter(layer => layer.length > 0);
+            sendState();
+            render();
+        }
+
+        function deleteFromModal() {
+            if (editContext) {
+                deleteGrade(editContext.location, editContext.layerIdx, editContext.itemIdx);
+            }
+            closeModal();
+        }
+
+        function getAllCodes() {
+            const codes = [];
+            hierarchy.forEach(layer => layer.forEach(g => codes.push(g.code)));
+            pool.forEach(g => codes.push(g.code));
+            return codes;
+        }
+
+        // ══════════════════════════════════════
+        // FRAME HEIGHT
+        // ══════════════════════════════════════
+        function updateFrameHeight() {
+            const h = document.querySelector('.main-container');
+            if (h) {
+                Streamlit.setFrameHeight(Math.max(h.scrollHeight + 24, 450));
+            }
+        }
+
+        // Handle Enter key in modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && document.getElementById('modalOverlay').classList.contains('active')) {
+                saveModal();
+            }
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // ══════════════════════════════════════
+        // INIT
+        // ══════════════════════════════════════
+        Streamlit.setComponentReady();
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onStreamlitRender);
+        setInterval(updateFrameHeight, 1000);
+    </script>
+</body>
+</html>

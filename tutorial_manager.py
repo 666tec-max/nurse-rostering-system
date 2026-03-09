@@ -140,10 +140,9 @@ def render_landing_page():
         }
         </style>
         <div class="landing-container">
-            <div class="landing-title">Welcome to Nurse Roster AI</div>
+            <div class="landing-title">Hello! Let’s Get Started with Nurse Rostering System.</div>
             <div class="landing-subtitle">
-                Supercharge your scheduling. Our AI helper ensures fair, compliant, 
-                and efficient rosters in seconds. Ready to see how it works?
+                Jump in and explore!
             </div>
         </div>
     """, unsafe_allow_html=True)
