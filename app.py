@@ -19,6 +19,13 @@ st.set_page_config(page_title="Nurse Rostering System", layout="wide")
 cookie_manager = stx.CookieManager(key="tutorial_mgr")
 st.session_state.cookie_manager = cookie_manager
 
+# Wait 1 tick for cookies to load to prevent mid-progress lobby flash
+if not st.session_state.get('cookie_wait_ready', False):
+    if len(cookie_manager.get_all()) == 0:
+        st.session_state.cookie_wait_ready = True
+        st.stop()
+    st.session_state.cookie_wait_ready = True
+
 is_completed = cookie_manager.get(cookie="tutorial_completed")
 if is_completed == "true" and not st.session_state.get("cookie_checked_flag"):
     st.session_state.show_tutorial_landing = False

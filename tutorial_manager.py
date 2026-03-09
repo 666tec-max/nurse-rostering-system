@@ -183,20 +183,26 @@ def add_visited_module(module_id):
 def reset_tutorial():
     """Resets the tutorial progress and clears cookies."""
     st.session_state.tutorial_active = True
-    st.session_state.show_tutorial_landing = False
-    st.session_state.current_tutorial_module = None
-    st.session_state.completed_tutorials = set()
-    st.session_state.tutorial_finished = False
-    st.session_state.tutorial_started = True # Force them to start again but from landing/menu
+    st.session_state.tutorial_started = False
     
-    # Clear cookies
+    # Clear cookies (both unified and legacy)
     if 'cookie_manager' in st.session_state:
         cm = st.session_state.cookie_manager
-        cm.delete(cookie="visited_modules")
-        cm.delete(cookie="tutorial_started")
-        cm.delete(cookie="tutorial_finished")
-        cm.delete(cookie="tutorial_completed")
-    
+        
+        # Use sync count logic for unique keys if needed or just delete
+        del_key1 = f"del_state_{st.session_state.get('sync_count', 0)}"
+        st.session_state.sync_count = st.session_state.get('sync_count', 0) + 1
+        cm.delete(cookie="nurse_tutorial_state", key=del_key1)
+        
+        del_key2 = f"del_legacy_{st.session_state.get('sync_count_legacy', 0)}"
+        st.session_state.sync_count_legacy = st.session_state.get('sync_count_legacy', 0) + 1
+        cm.delete(cookie="tutorial_completed", key=del_key2)
+        
+        # Also clean up old individual cookies just in case
+        cm.delete(cookie="visited_modules", key=del_key1 + "_old1")
+        cm.delete(cookie="tutorial_started", key=del_key1 + "_old2")
+        cm.delete(cookie="tutorial_finished", key=del_key1 + "_old3")
+        
     st.rerun()
 
 def render_landing_page():
@@ -473,6 +479,9 @@ def render_sidebar_progress():
             st.session_state.current_page = "Certificate"
             st.session_state.tutorial_active = False
             st.rerun()
+            
+        if st.sidebar.button("🔄 Restart Tutorial", use_container_width=True):
+            reset_tutorial()
     else:
         # Midway or skip users - show progress bar
         progress_val = int((visited / total) * 10)
@@ -486,6 +495,9 @@ def render_sidebar_progress():
                 <div style='font-family: monospace; font-size: 1.2rem; letter-spacing: 2px; color: #1E88E5;'>{filled}{empty}</div>
             </div>
         """, unsafe_allow_html=True)
+        
+        if st.sidebar.button("🔄 Restart Tutorial", use_container_width=True):
+            reset_tutorial()
 
 def render_certificate():
     """Renders the high-quality styled certificate page with completion date and confetti."""
