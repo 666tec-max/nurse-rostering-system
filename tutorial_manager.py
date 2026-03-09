@@ -202,110 +202,109 @@ def render_landing_page():
         [data-testid="stSidebar"] { display: none; }
         header { visibility: hidden; }
         
+        /* Make the app container fill the screen and center content */
         .stApp {
             background: linear-gradient(135deg, #e0f7fa 0%, #e8eaf6 50%, #f3e5f5 100%) !important;
             height: 100vh;
-            overflow: hidden;
         }
         
-        .main-wrapper {
+        /* Target the main scrollable area */
+        .main [data-testid="stVerticalBlock"] > div:first-child {
+            padding-top: 0 !important;
+        }
+
+        .landing-container {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            width: 100%;
             text-align: center;
-            padding: 20px;
-            box-sizing: border-box;
+            padding: 40px 20px;
+            max-width: 800px;
+            margin: 0 auto;
         }
         
-        .illustration-box {
+        .illustration-img {
             max-width: 400px;
-            margin-bottom: 20px;
-        }
-        
-        .illustration-box img {
             width: 100%;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-            opacity: 0.9;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
         }
         
         .landing-title {
             font-size: 3rem;
             font-weight: 800;
-            margin: 10px 0;
+            margin-bottom: 10px;
             color: #1E1E1E;
             line-height: 1.2;
         }
         
         .landing-subtitle {
-            font-size: 1.4rem;
-            color: #555;
-            margin-bottom: 10px;
-            font-weight: 500;
+            font-size: 1.5rem;
+            color: #008080;
+            margin-bottom: 15px;
+            font-weight: 600;
         }
         
         .landing-description {
-            font-size: 1.1rem;
-            color: #666;
+            font-size: 1.2rem;
+            color: #555;
             max-width: 600px;
-            margin-bottom: 30px;
-            line-height: 1.5;
+            margin-bottom: 40px;
+            line-height: 1.6;
         }
         
-        .button-group {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            width: 300px;
-            align-items: center;
-        }
-        
-        /* Styled Start Tutorial Button */
-        div.stButton > button:first-child[data-testid="baseButton-primary"] {
-            background-color: #008080 !important;
-            border-color: #008080 !important;
-            color: white !important;
-            font-weight: 700 !important;
-            height: 50px !important;
+        /* Premium Buttons Styling */
+        div.stButton > button {
+            height: 55px !important;
             font-size: 1.1rem !important;
-            width: 100% !important;
-            box-shadow: 0 4px 15px rgba(0,128,128,0.2) !important;
+            font-weight: 700 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s ease !important;
+            margin-bottom: 15px !important;
         }
         
-        /* Styled Explore Button (Secondary/Outline) */
-        div.stButton > button.secondary-btn {
+        div.stButton > button[data-testid="baseButton-primary"] {
+            background-color: #008080 !important;
+            border: none !important;
+            box-shadow: 0 4px 15px rgba(0,128,128,0.3) !important;
+        }
+        
+        div.stButton > button[data-testid="baseButton-primary"]:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 20px rgba(0,128,128,0.4) !important;
+        }
+        
+        div.stButton > button:not([data-testid="baseButton-primary"]) {
             background-color: transparent !important;
             border: 2px solid #008080 !important;
             color: #008080 !important;
-            font-weight: 600 !important;
-            height: 50px !important;
-            font-size: 1.1rem !important;
-            width: 100% !important;
+        }
+        
+        div.stButton > button:not([data-testid="baseButton-primary"]):hover {
+            background-color: rgba(0,128,128,0.05) !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # We use a container to wrap everything for flexbox centering
-    st.markdown('<div class="main-wrapper">', unsafe_allow_html=True)
+    # Centers the entire block in the column
+    st.markdown('<div style="height: 5vh;"></div>', unsafe_allow_html=True) # Top spacer
     
-    # Illustration
-    st.image("lobby_illustration.png", width=400)
-    
-    # Title & Subtitle
-    st.markdown("""
-        <div class="landing-title">Welcome to Nurse Rostering System</div>
-        <div class="landing-subtitle">Jump in and explore!</div>
-        <div class="landing-description">
-            Learn how to configure staff, shifts, constraints, 
-            and generate optimized nurse schedules.
+    # We'll use a single markdown for the non-interactive parts to ensure they are grouped
+    st.markdown(f"""
+        <div class="landing-container">
+            <img src="https://raw.githubusercontent.com/666tec-max/nurse-rostering-system/main/lobby_illustration.png" class="illustration-img">
+            <div class="landing-title">Nurse Rostering System</div>
+            <div class="landing-subtitle">Jump in and explore!</div>
+            <div class="landing-description">
+                Master the art of scheduling. Learn how to configure staff, shifts, and constraints to generate optimized rosters in seconds.
+            </div>
         </div>
     """, unsafe_allow_html=True)
     
-    # Buttons via Streamlit columns for centering the narrow button group
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Buttons centered via columns
+    col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         if st.button("Start Tutorial →", key="start_tutorial_btn", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
@@ -314,16 +313,12 @@ def render_landing_page():
             sync_state_to_cookies()
             st.rerun()
             
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        
         if st.button("Explore on Your Own →", key="explore_btn", use_container_width=True):
             st.session_state.show_tutorial_landing = False
             st.session_state.tutorial_active = False
             st.session_state.tutorial_started = True
             sync_state_to_cookies()
             st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def render_tutorial_menu():
     """Renders the grid of tutorial cards with completion indicators."""
