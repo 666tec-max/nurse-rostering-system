@@ -189,19 +189,27 @@ def reset_tutorial():
     if 'cookie_manager' in st.session_state:
         cm = st.session_state.cookie_manager
         
+        def safe_delete(cookie_name, key_val):
+            try:
+                if cm.get(cookie=cookie_name) is not None:
+                    cm.delete(cookie=cookie_name, key=key_val)
+            except Exception:
+                pass
+                
         # Use sync count logic for unique keys if needed or just delete
         del_key1 = f"del_state_{st.session_state.get('sync_count', 0)}"
         st.session_state.sync_count = st.session_state.get('sync_count', 0) + 1
-        cm.delete(cookie="nurse_tutorial_state", key=del_key1)
+        safe_delete("nurse_tutorial_state", del_key1)
         
         del_key2 = f"del_legacy_{st.session_state.get('sync_count_legacy', 0)}"
         st.session_state.sync_count_legacy = st.session_state.get('sync_count_legacy', 0) + 1
-        cm.delete(cookie="tutorial_completed", key=del_key2)
+        safe_delete("tutorial_completed", del_key2)
         
         # Also clean up old individual cookies just in case
-        cm.delete(cookie="visited_modules", key=del_key1 + "_old1")
-        cm.delete(cookie="tutorial_started", key=del_key1 + "_old2")
-        cm.delete(cookie="tutorial_finished", key=del_key1 + "_old3")
+        safe_delete("visited_modules", del_key1 + "_old1")
+        safe_delete("tutorial_started", del_key1 + "_old2")
+        safe_delete("tutorial_finished", del_key1 + "_old3")
+
         
     st.rerun()
 
@@ -480,7 +488,7 @@ def render_sidebar_progress():
             st.session_state.tutorial_active = False
             st.rerun()
             
-        if st.sidebar.button("🔄 Restart Tutorial", use_container_width=True):
+        if st.sidebar.button("🔄 Reset Tutorial Progress", use_container_width=True):
             reset_tutorial()
     else:
         # Midway or skip users - show progress bar
@@ -496,7 +504,7 @@ def render_sidebar_progress():
             </div>
         """, unsafe_allow_html=True)
         
-        if st.sidebar.button("🔄 Restart Tutorial", use_container_width=True):
+        if st.sidebar.button("🔄 Reset Tutorial Progress", use_container_width=True):
             reset_tutorial()
 
 def render_certificate():
