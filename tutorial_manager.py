@@ -146,12 +146,18 @@ def sync_state_to_cookies():
         "certificate_earned_date": st.session_state.certificate_earned_date
     }
     
+    # Use a unique key to prevent StreamlitDuplicateElementKey errors if called multiple times in one run
+    sync_key = f"sync_state_{st.session_state.get('sync_count', 0)}"
+    st.session_state.sync_count = st.session_state.get('sync_count', 0) + 1
+    
     import json
-    cm.set(cookie="nurse_tutorial_state", val=json.dumps(state_obj), key="sync_state")
+    cm.set(cookie="nurse_tutorial_state", val=json.dumps(state_obj), key=sync_key)
     
     # Also set a legacy compatible cookie for basic completed check if needed by other components
     if st.session_state.tutorial_finished:
-        cm.set(cookie="tutorial_completed", val="true", key="sync_legacy")
+        legacy_key = f"sync_legacy_{st.session_state.get('sync_count_legacy', 0)}"
+        st.session_state.sync_count_legacy = st.session_state.get('sync_count_legacy', 0) + 1
+        cm.set(cookie="tutorial_completed", val="true", key=legacy_key)
 
 def add_visited_module(module_id):
     """Adds a module to the visited list and syncs to cookies."""
@@ -169,8 +175,6 @@ def add_visited_module(module_id):
         st.session_state.completed_tutorials.add(module_id)
         st.session_state.tutorial_started = True
         
-        # Sync immediately
-        sync_state_to_cookies()
         if len(st.session_state.completed_tutorials) == len(TUTORIAL_MODULES):
             st.session_state.tutorial_finished = True
             
