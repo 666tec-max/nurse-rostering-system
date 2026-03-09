@@ -158,6 +158,13 @@ def add_visited_module(module_id):
     # Map the display name/id to the tutorial module ID if needed
     # (Checking if it's one of the 10 modules)
     module_ids = [m['id'] for m in TUTORIAL_MODULES]
+    
+    # Safety check for session state initialization
+    if 'completed_tutorials' not in st.session_state:
+        st.session_state.completed_tutorials = set()
+    if 'tutorial_started' not in st.session_state:
+        st.session_state.tutorial_started = False
+        
     if module_id in module_ids and module_id not in st.session_state.completed_tutorials:
         st.session_state.completed_tutorials.add(module_id)
         st.session_state.tutorial_started = True

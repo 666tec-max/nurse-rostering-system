@@ -35,9 +35,13 @@ if st.session_state.get('show_tutorial_summary', False):
     tutorial_manager.render_summary_page()
     st.stop()
 
-# Automatic Tutorial Visit Tracking
-if 'current_page' in st.session_state:
-    tutorial_manager.add_visited_module(st.session_state.current_page)
+# Automatic Tutorial Visit Tracking with Error Handling
+try:
+    if 'current_page' in st.session_state:
+        tutorial_manager.add_visited_module(st.session_state.current_page)
+except Exception as e:
+    # Silent fail during page transitions to prevent layout crashes, log for debugging
+    pass
 
 if st.session_state.tutorial_active and st.session_state.current_tutorial_module is None:
     tutorial_manager.render_tutorial_menu()
@@ -317,19 +321,42 @@ def save_data(table_name, file_path, data):
             cloud_success = True
             
         elif table_name == "demand":
-            # Flatten demand dict
+            # Flatten demand dict with robust type checking
             rows = []
             for typ in ["default", "overrides"]:
-                for d_key, shifts in data.get(typ, {}).items():
-                    for s_code, skills in shifts.items():
-                        for skill, count in skills.items():
-                            rows.append({
-                                "type": typ,
-                                "date_key": d_key,
-                                "shift_code": s_code,
-                                "skill_code": None if skill == "Total" else skill,
-                                "count": count
-                            })
+                typ_data = data.get(typ, {})
+                if not isinstance(typ_data, dict):
+                    continue
+                
+                for d_key, outer_val in typ_data.items():
+                    # For 'default', outer_val is skill_dict (shift_code: skill_dict)
+                    # For 'overrides', outer_val is a dict of shifts (date_str: {shift_code: skill_dict})
+                    
+                    if typ == "default":
+                        # d_key is shift_code, outer_val is skill_dict
+                        if isinstance(outer_val, dict):
+                            for skill, count in outer_val.items():
+                                rows.append({
+                                    "type": typ,
+                                    "date_key": d_key, # Use shift_code as date_key for defaults
+                                    "shift_code": d_key,
+                                    "skill_code": None if skill == "Total" else skill,
+                                    "count": count
+                                })
+                    else:
+                        # typ is 'overrides', d_key is date_str, outer_val is {shift_code: skill_dict}
+                        if isinstance(outer_val, dict):
+                            for s_code, skill_dict in outer_val.items():
+                                if isinstance(skill_dict, dict):
+                                    for skill, count in skill_dict.items():
+                                        rows.append({
+                                            "type": typ,
+                                            "date_key": d_key,
+                                            "shift_code": s_code,
+                                            "skill_code": None if skill == "Total" else skill,
+                                            "count": count
+                                        })
+            
             supabase.table(table_name).delete().neq("id", -1).execute()
             if rows:
                 supabase.table(table_name).insert(rows).execute()
@@ -402,13 +429,7 @@ DEFAULT_SKILLS = [
 
 st.title("Nurse Rostering System")
 
-# Show Back to Tutorial Menu if we are in an active session and NOT on a special tutorial page
-if (st.session_state.get('tutorial_active') or (st.session_state.get('tutorial_started') and not st.session_state.get('tutorial_finished'))) and st.session_state.current_page not in ['Certificate', 'Generate Schedule']:
-    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
-    if st.button("⬅️ Back to Tutorial Menu", type="primary", use_container_width=True):
-        st.session_state.current_tutorial_module = None
-        st.session_state.tutorial_active = True # Take them to the module menu
-        st.rerun()
+# Legacy navigation button removed to prevent duplicates (consolidated in Main Layout below)
 
 show_notifications()
 
