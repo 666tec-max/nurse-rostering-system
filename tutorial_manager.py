@@ -275,6 +275,7 @@ def render_tutorial_menu():
                      help="Visit all modules to unlock the app"):
             st.session_state.tutorial_active = False
             st.session_state.tutorial_finished = True
+            st.session_state.show_tutorial_summary = True
             st.rerun()
 
 # render_tutorial_step removed as it is no longer needed in the new checklist flow
@@ -300,4 +301,5 @@ def render_summary_page():
     
     if st.button("🚀 Enter the System", use_container_width=True, type="primary"):
         st.session_state.tutorial_active = False
+        st.session_state.show_tutorial_summary = False
         st.rerun()

@@ -22,7 +22,7 @@ if st.session_state.show_tutorial_landing:
     tutorial_manager.render_landing_page()
     st.stop()
 
-if st.session_state.tutorial_finished:
+if st.session_state.get('show_tutorial_summary', False):
     tutorial_manager.render_summary_page()
     st.stop()
 
