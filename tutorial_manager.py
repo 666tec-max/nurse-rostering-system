@@ -174,79 +174,147 @@ def reset_tutorial():
     st.rerun()
 
 def render_landing_page():
-    """Renders the first-time visit landing page."""
+    """Renders the first-time visit landing page with 100vh flex centering."""
+    
+    # Base64 encode the illustration for inline display if possible, or just use absolute path
+    # Since we are in Streamlit, using an absolute path or served path is tricky.
+    # We'll use the image from the local path.
+    
     st.markdown("""
         <style>
+        /* Hide sidebar and header completely */
         [data-testid="collapsedControl"] { display: none; }
         [data-testid="stSidebar"] { display: none; }
+        header { visibility: hidden; }
+        
         .stApp {
             background: linear-gradient(135deg, #e0f7fa 0%, #e8eaf6 50%, #f3e5f5 100%) !important;
+            height: 100vh;
+            overflow: hidden;
         }
-        .landing-container {
+        
+        .main-wrapper {
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            min-height: 80vh;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
             text-align: center;
-            position: relative;
-            z-index: 10;
+            padding: 20px;
+            box-sizing: border-box;
         }
-        .landing-title {
-            font-size: 3.5rem;
-            font-weight: 800;
+        
+        .illustration-box {
+            max-width: 400px;
             margin-bottom: 20px;
+        }
+        
+        .illustration-box img {
+            width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            opacity: 0.9;
+        }
+        
+        .landing-title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 10px 0;
             color: #1E1E1E;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.05);
+            line-height: 1.2;
         }
+        
         .landing-subtitle {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             color: #555;
-            margin-bottom: 50px;
+            margin-bottom: 10px;
+            font-weight: 500;
         }
-        /* Floating Background Icons */
-        .icon-bg {
-            position: absolute;
-            font-size: 10rem;
-            opacity: 0.05;
-            z-index: 1;
+        
+        .landing-description {
+            font-size: 1.1rem;
+            color: #666;
+            max-width: 600px;
+            margin-bottom: 30px;
+            line-height: 1.5;
         }
-        .icon-1 { top: 10%; left: 10%; transform: rotate(-15deg); }
-        .icon-2 { top: 60%; right: 10%; transform: rotate(15deg); }
-        .icon-3 { bottom: 10%; left: 30%; transform: rotate(5deg); }
+        
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 300px;
+            align-items: center;
+        }
+        
+        /* Styled Start Tutorial Button */
+        div.stButton > button:first-child[data-testid="baseButton-primary"] {
+            background-color: #008080 !important;
+            border-color: #008080 !important;
+            color: white !important;
+            font-weight: 700 !important;
+            height: 50px !important;
+            font-size: 1.1rem !important;
+            width: 100% !important;
+            box-shadow: 0 4px 15px rgba(0,128,128,0.2) !important;
+        }
+        
+        /* Styled Explore Button (Secondary/Outline) */
+        div.stButton > button.secondary-btn {
+            background-color: transparent !important;
+            border: 2px solid #008080 !important;
+            color: #008080 !important;
+            font-weight: 600 !important;
+            height: 50px !important;
+            font-size: 1.1rem !important;
+            width: 100% !important;
+        }
         </style>
-        <div class="icon-bg icon-1">🗓️</div>
-        <div class="icon-bg icon-2">⏱️</div>
-        <div class="icon-bg icon-3">🩺</div>
-        <div class="landing-container">
-            <div class="landing-title">Welcome to Nurse Rostering System</div>
-            <div class="landing-subtitle">Jump in and explore!</div>
+    """, unsafe_allow_html=True)
+
+    # We use a container to wrap everything for flexbox centering
+    st.markdown('<div class="main-wrapper">', unsafe_allow_html=True)
+    
+    # Illustration
+    st.image("/Users/tec/Documents/trae_projects/3/lobby_illustration.png", width=400)
+    
+    # Title & Subtitle
+    st.markdown("""
+        <div class="landing-title">Welcome to Nurse Rostering System</div>
+        <div class="landing-subtitle">Jump in and explore!</div>
+        <div class="landing-description">
+            Learn how to configure staff, shifts, constraints, 
+            and generate optimized nurse schedules.
         </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("<div style='display: flex; justify-content: center; gap: 20px; margin-top: 20px;'>", unsafe_allow_html=True)
-    col1, col2, col3, col4 = st.columns([1, 1.5, 1.5, 1])
+    # Buttons via Streamlit columns for centering the narrow button group
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("Start Tutorial →", use_container_width=True, type="primary"):
+        if st.button("Start Tutorial →", key="start_tutorial_btn", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
             st.session_state.tutorial_started = True
             st.session_state.show_tutorial_landing = False
             sync_state_to_cookies()
             st.rerun()
-    with col3:
-        if st.button("Explore on Your Own →", use_container_width=True):
+            
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        
+        if st.button("Explore on Your Own →", key="explore_btn", use_container_width=True):
             st.session_state.show_tutorial_landing = False
             st.session_state.tutorial_active = False
             st.session_state.tutorial_started = True
             sync_state_to_cookies()
             st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def render_tutorial_menu():
-    """Renders the grid of tutorial cards."""
-    # Center-aligned title
-    st.markdown("<h1 style='text-align: center;'>Guided Tutorial Workflow</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 1.1rem; color: #666;'>Visit all modules to unlock the full app experience. Progress through each area to master the system.</p>", unsafe_allow_html=True)
+    """Renders the grid of tutorial cards with completion indicators."""
+    # Center-aligned header
+    st.markdown("<h1 style='text-align: center; margin-bottom: 5px;'>Guided Tutorial Workflow</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.1rem; color: #666; margin-bottom: 30px;'>Explore each module to master the Nurse Rostering System.</p>", unsafe_allow_html=True)
 
     # Progress Calculation
     total_modules = len(TUTORIAL_MODULES)
@@ -266,40 +334,35 @@ def render_tutorial_menu():
         </div>
     """, unsafe_allow_html=True)
 
-    # Custom CSS for playful cards
+    # Custom CSS for premium tutorial cards
     st.markdown("""
         <style>
         .stButton > button {
-            height: 120px !important;
-            border-radius: 15px !important;
+            height: 100px !important;
+            border-radius: 12px !important;
             border: 2px solid #F0F0F0 !important;
             transition: all 0.3s ease !important;
             background: #FFF !important;
             color: #333 !important;
-            padding: 10px !important;
+            white-space: pre-wrap !important;
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
+            padding: 10px !important;
         }
         .stButton > button:hover {
             transform: translateY(-5px) !important;
             box-shadow: 0 10px 20px rgba(0,0,0,0.05) !important;
-            border-color: #4ECDC4 !important;
+            border-color: #008080 !important;
         }
-        .stButton > button p {
-            font-size: 1.1rem !important;
-            font-weight: 800 !important;
-            margin: 0 !important;
-            white-space: pre-wrap !important;
-        }
-        .completed-btn {
-            border-color: #4CAF50 !important;
-            background: #F1FBF2 !important;
-        }
-        .active-btn {
-            border-color: #4ECDC4 !important;
-            border-width: 3px !important;
+        /* Completed Module Style */
+        .completed-btn > div > button {
+            background-color: #f0fff4 !important;
+            border-color: #9ae6b4 !important;
+            color: #2f855a !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -313,19 +376,26 @@ def render_tutorial_menu():
     ]
 
     for row_modules in rows:
-        margin_col_left, *cols, margin_col_right = st.columns([1] + [2] * len(row_modules) + [1])
+        # Center the rows by adding margin columns
+        cols = st.columns([1] + [2] * len(row_modules) + [1])
         for i, module in enumerate(row_modules):
-            with cols[i]:
+            with cols[i+1]:
                 is_completed = module['id'] in st.session_state.completed_tutorials
-                
                 status_emoji = "✅ " if is_completed else ""
                 btn_label = f"{module['icon']}\n{status_emoji}{module['name']}"
                 
-                if st.button(btn_label, key=f"btn_{module['id']}", use_container_width=True):
+                # Wrap in a container to target via CSS
+                if is_completed:
+                    st.markdown('<div class="completed-btn">', unsafe_allow_html=True)
+                
+                if st.button(btn_label, key=f"btn_menu_{module['id']}", use_container_width=True):
                     add_visited_module(module['id'])
                     st.session_state.current_tutorial_module = module['id']
                     st.session_state.current_page = module['id']
                     st.rerun()
+                
+                if is_completed:
+                    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 40px;'></div>", unsafe_allow_html=True)
     
