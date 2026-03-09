@@ -294,7 +294,6 @@ def render_landing_page():
     # We'll use a single markdown for the non-interactive parts to ensure they are grouped
     st.markdown(f"""
         <div class="landing-container">
-            <img src="https://raw.githubusercontent.com/666tec-max/nurse-rostering-system/main/lobby_illustration.png" class="illustration-img">
             <div class="landing-title">Nurse Rostering System</div>
             <div class="landing-subtitle">Jump in and explore!</div>
             <div class="landing-description">
