@@ -395,6 +395,13 @@ DEFAULT_SKILLS = [
 ]
 
 st.title("Nurse Rostering System")
+
+if st.session_state.get('tutorial_active') and st.session_state.get('current_tutorial_module'):
+    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    if st.button("⬅️ Back to Tutorial Menu", type="primary", use_container_width=True):
+        st.session_state.current_tutorial_module = None
+        st.rerun()
+
 show_notifications()
 
 # Calculate planning horizon from user-selected date range
@@ -2002,6 +2009,15 @@ with st.sidebar:
         st.button("📊 Minimum Demand", on_click=lambda: st.session_state.update(current_page='Minimum Demand'), use_container_width=True)
 
     st.markdown("---")
+    
+    # Persistent Start Tutorial button
+    if not st.session_state.get("tutorial_active") and not st.session_state.get("tutorial_finished") and not st.session_state.get("show_tutorial_landing"):
+        if st.sidebar.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
+            st.session_state.tutorial_active = True
+            st.session_state.show_tutorial_landing = False
+            st.session_state.current_tutorial_module = None
+            st.rerun()
+            
     if st.sidebar.button("✨ Reset Tutorial", use_container_width=True):
         tutorial_manager.reset_tutorial()
         st.rerun()

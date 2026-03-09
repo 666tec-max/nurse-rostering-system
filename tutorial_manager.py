@@ -114,33 +114,55 @@ def render_landing_page():
     """Renders the first-time visit landing page."""
     st.markdown("""
         <style>
+        [data-testid="collapsedControl"] { display: none; }
+        [data-testid="stSidebar"] { display: none; }
+        .stApp {
+            background: linear-gradient(135deg, #e0f7fa 0%, #e8eaf6 50%, #f3e5f5 100%) !important;
+        }
         .landing-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding-top: 100px;
+            min-height: 80vh;
             text-align: center;
+            position: relative;
+            z-index: 10;
         }
         .landing-title {
-            font-size: 3rem;
+            font-size: 3.5rem;
             font-weight: 800;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
             color: #1E1E1E;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.05);
         }
         .landing-subtitle {
             font-size: 1.5rem;
             color: #555;
             margin-bottom: 50px;
         }
+        /* Floating Background Icons */
+        .icon-bg {
+            position: absolute;
+            font-size: 10rem;
+            opacity: 0.05;
+            z-index: 1;
+        }
+        .icon-1 { top: 10%; left: 10%; transform: rotate(-15deg); }
+        .icon-2 { top: 60%; right: 10%; transform: rotate(15deg); }
+        .icon-3 { bottom: 10%; left: 30%; transform: rotate(5deg); }
         </style>
+        <div class="icon-bg icon-1">🗓️</div>
+        <div class="icon-bg icon-2">⏱️</div>
+        <div class="icon-bg icon-3">🩺</div>
         <div class="landing-container">
             <div class="landing-title">Welcome to Nurse Rostering System</div>
             <div class="landing-subtitle">Jump in and explore!</div>
         </div>
     """, unsafe_allow_html=True)
     
-    col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
+    st.markdown("<div style='display: flex; justify-content: center; gap: 20px; margin-top: 20px;'>", unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns([1, 1.5, 1.5, 1])
     with col2:
         if st.button("Start Tutorial →", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
@@ -150,7 +172,10 @@ def render_landing_page():
         if st.button("Explore on Your Own →", use_container_width=True):
             st.session_state.show_tutorial_landing = False
             st.session_state.tutorial_active = False
+            # We explicitly do NOT set tutorial_finished to True here,
+            # so the persistent "Start Tutorial" button can appear.
             st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 def render_tutorial_menu():
     """Renders the grid of tutorial cards."""
@@ -214,12 +239,12 @@ def render_tutorial_menu():
         </style>
     """, unsafe_allow_html=True)
 
-    # Define Rows
+    # Define Rows based on requirements
     rows = [
-        TUTORIAL_MODULES[0:3],   # Theme, Hard, Soft
-        TUTORIAL_MODULES[3:6],   # Shifts, Skills, Grade
-        TUTORIAL_MODULES[6:8],   # Dept, Demand
-        TUTORIAL_MODULES[8:10],  # Staff, Leave
+        TUTORIAL_MODULES[0:3],   # Theme, Hard, Soft (Row 1)
+        TUTORIAL_MODULES[3:6],   # Shifts, Skills, Grade (Row 2)
+        [TUTORIAL_MODULES[6], TUTORIAL_MODULES[7]], # Dept, Demand (Row 3)
+        [TUTORIAL_MODULES[8], TUTORIAL_MODULES[9]], # Staff, Leave (Row 4)
     ]
 
     for row_modules in rows:
@@ -227,14 +252,13 @@ def render_tutorial_menu():
         for i, module in enumerate(row_modules):
             with cols[i]:
                 is_completed = module['id'] in st.session_state.completed_tutorials
-                is_active = st.session_state.current_tutorial_module == module['id']
                 
                 status_emoji = "✅ " if is_completed else ""
                 btn_label = f"{module['icon']}\n{status_emoji}{module['name']}"
                 
                 if st.button(btn_label, key=f"btn_{module['id']}", use_container_width=True):
+                    st.session_state.completed_tutorials.add(module['id'])
                     st.session_state.current_tutorial_module = module['id']
-                    st.session_state.current_tutorial_step = 0
                     st.session_state.current_page = module['id']
                     st.rerun()
 
@@ -253,80 +277,7 @@ def render_tutorial_menu():
             st.session_state.tutorial_finished = True
             st.rerun()
 
-def render_tutorial_step():
-    """Renders the guidance overlay for a specific tutorial step."""
-    module_id = st.session_state.current_tutorial_module
-    step_idx = st.session_state.current_tutorial_step
-    
-    if module_id not in TUTORIAL_STEPS:
-        st.session_state.current_tutorial_module = None
-        st.rerun()
-        
-    steps = TUTORIAL_STEPS[module_id]
-    if step_idx >= len(steps):
-        # Module completed
-        st.session_state.completed_tutorials.add(module_id)
-        st.session_state.current_tutorial_module = None
-        st.session_state.current_tutorial_step = 0
-        st.success(f"🎉 Awesome! You've mastered {module_id}!")
-        if st.button("Back to Tutorial Menu"):
-            st.rerun()
-        return
-
-    step = steps[step_idx]
-    
-    # Render the guide card at the top
-    with st.container(border=True):
-        st.markdown(f"### {step['title']}")
-        st.write(step['text'])
-        
-        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-        with c1:
-            if st.button("⬅️ Back", disabled=(step_idx == 0), use_container_width=True):
-                st.session_state.current_tutorial_step -= 1
-                st.rerun()
-        with c2:
-            if st.button("Next ➡️", use_container_width=True, type="primary"):
-                st.session_state.current_tutorial_step += 1
-                if st.session_state.current_tutorial_step >= len(steps):
-                    st.session_state.completed_tutorials.add(module_id)
-                st.rerun()
-        with c3:
-            if st.button("⏭️ Skip Module", use_container_width=True):
-                st.session_state.current_tutorial_module = None
-                st.rerun()
-        with c4:
-            if st.button("🏁 Exit Tutorial", use_container_width=True):
-                st.session_state.tutorial_active = False
-                st.session_state.current_tutorial_module = None
-                st.session_state.tutorial_finished = True
-                st.rerun()
-
-    # Progress bar
-    progress = (step_idx + 1) / len(steps)
-    st.progress(progress, text=f"Step {step_idx + 1} of {len(steps)}")
-    
-    # Visual highlight logic (CSS injection)
-    st.markdown(f"""
-        <style>
-        /* Modern highlight effect */
-        [data-testid*="{step['target']}"],
-        div:has(> [data-testid*="{step['target']}"]),
-        div:has(> label:contains("{step['target']}")) {{
-            box-shadow: 0 0 0 2px #FFF, 0 0 0 6px #4ECDC4 !important;
-            border-radius: 8px !important;
-            z-index: 9999 !important;
-            position: relative !important;
-            animation: tutorialPulse 1.5s infinite !important;
-        }}
-        
-        @keyframes tutorialPulse {{
-            0% {{ box-shadow: 0 0 0 2px #FFF, 0 0 0 4px #4ECDC4; }}
-            50% {{ box-shadow: 0 0 0 2px #FFF, 0 0 0 10px #FF6B6B; }}
-            100% {{ box-shadow: 0 0 0 2px #FFF, 0 0 0 4px #4ECDC4; }}
-        }}
-        </style>
-    """, unsafe_allow_html=True)
+# render_tutorial_step removed as it is no longer needed in the new checklist flow
 
 def render_summary_page():
     """Renders the final tutorial summary."""
