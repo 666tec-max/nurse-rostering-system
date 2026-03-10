@@ -2239,19 +2239,25 @@ with st.sidebar:
     st.components.v1.html("""
         <script>
             let timeout;
-            const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
             
             function collapseAll() {
+                const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
                 if (!sidebar) return;
+                
                 const expanders = sidebar.querySelectorAll('div[data-testid="stExpander"]');
                 expanders.forEach(exp => {
-                    // Check if content is visible (expanded)
+                    // Look for the toggling element (usually a summary or a div with role="button")
+                    const toggle = exp.querySelector('summary') || exp.querySelector('[role="button"]');
                     const content = exp.querySelector('div[id^="stExpanderContent"]');
-                    if (content && content.offsetHeight > 0) {
-                        const summary = exp.querySelector('summary') || exp.querySelector('[role="button"]');
-                        if (summary) {
-                            // Ensure we only click if it's actually expanded to avoid toggling it open
-                            summary.click();
+                    
+                    if (toggle && content) {
+                        // Streamlit expanders use aria-expanded on the toggle element
+                        const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+                        // Fallback check: if content is visible
+                        const isVisible = content.offsetHeight > 0;
+                        
+                        if (isExpanded || isVisible) {
+                            toggle.click();
                         }
                     }
                 });
@@ -2262,19 +2268,13 @@ with st.sidebar:
                 timeout = setTimeout(collapseAll, 5000); // 5 seconds inactivity
             }
 
-            if (sidebar) {
-                // Listen for any activity in the sidebar
-                ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(event => {
-                    sidebar.addEventListener(event, resetTimer, {passive: true});
-                });
-                
-                // Also listen for clicks on any buttons inside the sidebar which might not trigger mousemove
-                sidebar.querySelectorAll('button').forEach(btn => {
-                    btn.addEventListener('click', resetTimer);
-                });
+            // Global activity listener on the parent window for better coverage
+            const target = window.parent.document;
+            ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(event => {
+                target.addEventListener(event, resetTimer, {passive: true});
+            });
 
-                resetTimer();
-            }
+            resetTimer();
         </script>
     """, height=0)
             
