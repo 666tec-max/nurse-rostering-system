@@ -92,9 +92,13 @@ def initialize_tutorial_state():
         st.session_state.show_tutorial_landing = True
     if 'certificate_earned_date' not in st.session_state:
         st.session_state.certificate_earned_date = None
+    # cert_user_name: blank by default so user is prompted to fill in their own name
+    if 'cert_user_name' not in st.session_state:
+        st.session_state.cert_user_name = ""
 
     # 2. Skip cookie loading if we just performed a reset in this session
     if st.session_state.get('just_reset'):
+        # Clear the flag but do NOT reload cookies — the reset state is authoritative
         st.session_state.just_reset = False
         return
 
@@ -185,10 +189,11 @@ def add_visited_module(module_id):
         sync_state_to_cookies()
 
 def reset_tutorial():
-    """Resets the tutorial progress and clears cookies."""
-    # Set a flag to bypass cookie loading on the next run
+    """Resets the tutorial progress, clears cookies, and immediately redirects to the tutorial menu."""
+    # Set the just_reset flag FIRST so initialize_tutorial_state skips cookie loading on the next run
     st.session_state.just_reset = True
     
+    # Clear all tutorial state
     st.session_state.completed_tutorials = set()
     st.session_state.tutorial_started = False
     st.session_state.tutorial_finished = False
@@ -197,21 +202,19 @@ def reset_tutorial():
     st.session_state.current_page = 'Tutorial Menu'
     st.session_state.current_tutorial_module = None
     st.session_state.certificate_earned_date = None
+    st.session_state.cert_user_name = ""
     
     # Clear cookies (both unified and legacy)
     if 'cookie_manager' in st.session_state:
         cm = st.session_state.cookie_manager
-        
-        # Use sync count logic for unique keys if needed or just delete
         st.session_state.sync_count = st.session_state.get('sync_count', 0) + 1
         sync_key = f"reset_state_{st.session_state.sync_count}"
-        
-        # Clear main state objects
+        # Write empty state to overwrite old cookie immediately
         cm.set(cookie="nurse_tutorial_state", val="{}", key=sync_key)
         cm.set(cookie="tutorial_completed", val="false", key=sync_key + "_leg")
-        
-    # No st.rerun() here - let the script continue so the cookie set can render.
-    # The st.button that calls this will naturally cause a rerun anyway.
+    
+    # Force immediate re-run so the new state takes effect before anything else fires
+    st.rerun()
 
 def render_landing_page():
     """Renders the first-time visit landing page with 100vh flex centering."""
@@ -487,70 +490,98 @@ def render_sidebar_progress():
     st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>🏅 Tutorial & Certificate</span>", unsafe_allow_html=True)
     
     with st.expander("🏅 Tutorial & Certificate", expanded=False):
-        if visited == 0:
-            if st.button("Start Tutorial", use_container_width=True, type="primary"):
+        if visited == 0 and not st.session_state.get('tutorial_finished', False):
+            # ── 0% State ──
+            if st.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
                 st.session_state.tutorial_active = True
                 st.session_state.show_tutorial_landing = False
                 st.session_state.current_tutorial_module = None
                 st.session_state.current_page = 'Tutorial Menu'
                 st.rerun()
-        elif visited < total:
-            if st.button("Continue Tutorial", use_container_width=True, type="primary"):
-                st.session_state.tutorial_active = True
-                st.session_state.show_tutorial_landing = False
-                st.session_state.current_tutorial_module = None
-                st.session_state.current_page = 'Tutorial Menu'
-                st.rerun()
-        else:
-            # Progress = 100%
-            if st.button("Your Certificate", use_container_width=True, type="primary"):
-                st.session_state.current_page = "Certificate"
-                st.session_state.tutorial_active = False
-                st.rerun()
-            
-            if st.button("Reset Progress", use_container_width=True, help="Clear all tutorial data and restart from scratch"):
-                reset_tutorial()
+            st.markdown(
+                f"<div style='text-align:center; font-size:0.72rem; color:#94a3b8; margin-top:4px;'>0 / {total} modules visited</div>",
+                unsafe_allow_html=True
+            )
 
-        # Progress Bar (optional but nice for context)
-        if 0 < visited < total:
+        elif visited < total and not st.session_state.get('tutorial_finished', False):
+            # ── 1–99% State ──
+            if st.button("▶️ Continue Tutorial", use_container_width=True, type="primary"):
+                st.session_state.tutorial_active = True
+                st.session_state.show_tutorial_landing = False
+                st.session_state.current_tutorial_module = None
+                st.session_state.current_page = 'Tutorial Menu'
+                st.rerun()
+            # Progress mini-bar
             progress_percentage = int((visited / total) * 100)
             st.markdown(f"""
-                <div style='margin-top: 10px; margin-bottom: 5px;'>
-                    <div style='background-color: #EEE; border-radius: 4px; height: 6px; overflow: hidden;'>
-                        <div style='background: #4ECDC4; width: {progress_percentage}%; height: 100%;'></div>
+                <div style='margin-top: 8px; margin-bottom: 2px;'>
+                    <div style='background-color: #E2E8F0; border-radius: 4px; height: 6px; overflow: hidden;'>
+                        <div style='background: linear-gradient(90deg,#4ECDC4,#45B7D1); width: {progress_percentage}%; height: 100%; transition: width 0.5s;'></div>
                     </div>
-                    <div style='display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b; margin-top: 4px;'>
-                        <span>Progress</span>
+                    <div style='display: flex; justify-content: space-between; font-size: 0.72rem; color: #64748b; margin-top: 4px;'>
+                        <span>{visited} / {total} modules</span>
                         <span>{progress_percentage}%</span>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
 
+        else:
+            # ── 100% State ──
+            st.markdown(
+                "<div style='text-align:center; font-size:0.82rem; color:#16a34a; font-weight:700; margin-bottom:8px; padding:6px; background:#f0fdf4; border-radius:8px;'>✅ Tutorial Complete!</div>",
+                unsafe_allow_html=True
+            )
+            if st.button("🏅 Your Certificate", use_container_width=True, type="primary"):
+                st.session_state.current_page = "Certificate"
+                st.session_state.tutorial_active = False
+                st.rerun()
+            
+            st.markdown("<div style='margin-top:6px;'></div>", unsafe_allow_html=True)
+            if st.button("🔄 Reset Progress", use_container_width=True, help="Clear all tutorial progress and restart from scratch"):
+                reset_tutorial()
+
 def render_certificate():
     """Renders the high-quality styled certificate page with completion date and confetti."""
-    # Celebration effect
-    st.snow()
-    st.balloons()
-    
     import datetime
-    # Get current date if not already stored
+    import streamlit.components.v1 as components
+
+    # Celebration effect (only on first visit to this page this session)
+    if not st.session_state.get('_cert_celebrated'):
+        st.snow()
+        st.balloons()
+        st.session_state._cert_celebrated = True
+    
+    # Auto-populate completion date if not already set
     if not st.session_state.get('certificate_earned_date'):
         st.session_state.certificate_earned_date = datetime.datetime.now().strftime("%B %d, %Y")
     
-    # User customization
+    st.markdown("""
+        <h2 style='text-align:center; margin-bottom:4px;'>🏅 Certificate of Completion</h2>
+        <p style='text-align:center; color:#64748b; margin-bottom:20px;'>Personalise your certificate below, then download it as a PDF.</p>
+    """, unsafe_allow_html=True)
+
+    # User customisation fields (centred)
     col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
     with col_c2:
-        st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
-        user_name = st.text_input("Enter your name for the certificate:", value=st.session_state.get('cert_user_name', 'The User'))
+        # Default to empty so user is prompted — not "The User"
+        saved_name = st.session_state.get('cert_user_name', '')
+        user_name = st.text_input(
+            "Your name on the certificate:",
+            value=saved_name,
+            placeholder="Enter your full name…",
+            key="cert_name_input"
+        )
         st.session_state.cert_user_name = user_name
-        
-        # New: Editable Completion Date
-        completion_date = st.text_input("Date of Completion:", value=st.session_state.certificate_earned_date)
-        st.session_state.certificate_earned_date = completion_date
-        
-        st.markdown("</div>", unsafe_allow_html=True)
 
-    import streamlit.components.v1 as components
+        completion_date = st.text_input(
+            "Date of Completion:",
+            value=st.session_state.certificate_earned_date,
+            key="cert_date_input"
+        )
+        st.session_state.certificate_earned_date = completion_date
+
+    # Resolve display name — fall back gracefully
+    display_name = user_name.strip() if user_name.strip() else "[ Your Name ]"
 
     cert_html = f"""
     <html>
@@ -645,7 +676,7 @@ def render_certificate():
             <div id="certificate" class="cert-container">
                 <div class="cert-header">CERTIFICATE OF COMPLETION</div>
                 <div class="cert-sub">This certificate is proudly presented to</div>
-                <div class="cert-name">{user_name}</div>
+                <div class="cert-name">{display_name}</div>
                 <div class="cert-desc">
                     for successfully exploring and completing<br>
                     all modules in the<br>
@@ -665,7 +696,7 @@ def render_certificate():
                 const element = document.getElementById('certificate');
                 const opt = {{
                     margin:       0.5,
-                    filename:     'Nurse_Rostering_Certificate_{user_name.replace(" ", "_")}.pdf',
+                    filename:     'Nurse_Rostering_Certificate_{display_name.replace(" ", "_")}.pdf',
                     image:        {{ type: 'jpeg', quality: 0.98 }},
                     html2canvas:  {{ scale: 2, useCORS: true }},
                     jsPDF:        {{ unit: 'in', format: 'letter', orientation: 'landscape' }}
