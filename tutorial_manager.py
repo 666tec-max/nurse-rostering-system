@@ -14,8 +14,8 @@ TUTORIAL_MODULES = [
     {"id": "Grades Hierarchy", "name": "Grades", "icon": "🏆", "color": "#FFF9DB"},
     {"id": "Manage Departments", "name": "Departments", "icon": "🏢", "color": "#E8F4FD"},
     {"id": "Minimum Demand", "name": "Minimum Demand", "icon": "📊", "color": "#FFF5F5"},
-    {"id": "Manage Staffs", "name": "Staff", "icon": "👥", "color": "#F8F9FA"},
-    {"id": "Leave Types", "name": "Leave Types", "icon": "🏖️", "color": "#E6FFFA"},
+    {"id": "Manage Staff", "name": "Staff", "icon": "👥", "color": "#F8F9FA"},
+    {"id": "Leave Type", "name": "Leave Types", "icon": "🏖️", "color": "#E6FFFA"},
 ]
 
 TUTORIAL_STEPS = {
@@ -34,10 +34,10 @@ TUTORIAL_STEPS = {
     "Grades Hierarchy": [
         {"title": "The Pyramid", "text": "Grades define seniority. The system uses this to ensure shifts are covered by qualified staff.", "target": "🏆 Grades"},
     ],
-    "Leave Types": [
+    "Leave Type": [
         {"title": "Time Off", "text": "Define types of leave like Annual, Sick, or Unpaid. These are automatically respected during generation.", "target": "🏖️ Leave Types"},
     ],
-    "Manage Staffs": [
+    "Manage Staff": [
         {"title": "Your Personnel", "text": "This is the heart of the system. Manage your nurses, their grades, skills, and department assignments.", "target": "👥 Staff"},
         {"title": "Smart Filters", "text": "Use the search and filter bar to quickly find staff by name, grade, or department.", "target": "🔍 Search"},
     ],
@@ -93,7 +93,12 @@ def initialize_tutorial_state():
     if 'certificate_earned_date' not in st.session_state:
         st.session_state.certificate_earned_date = None
 
-    # 2. Load from unified cookie
+    # 2. Skip cookie loading if we just performed a reset in this session
+    if st.session_state.get('just_reset'):
+        st.session_state.just_reset = False
+        return
+
+    # 3. Load from unified cookie
     if 'cookie_manager' in st.session_state:
         cm = st.session_state.cookie_manager
         raw_state = cm.get(cookie="nurse_tutorial_state")
@@ -181,6 +186,9 @@ def add_visited_module(module_id):
 
 def reset_tutorial():
     """Resets the tutorial progress and clears cookies."""
+    # Set a flag to bypass cookie loading on the next run
+    st.session_state.just_reset = True
+    
     st.session_state.completed_tutorials = set()
     st.session_state.tutorial_started = False
     st.session_state.tutorial_finished = False
@@ -202,7 +210,8 @@ def reset_tutorial():
         cm.set(cookie="nurse_tutorial_state", val="{}", key=sync_key)
         cm.set(cookie="tutorial_completed", val="false", key=sync_key + "_leg")
         
-    st.rerun()
+    # No st.rerun() here - let the script continue so the cookie set can render.
+    # The st.button that calls this will naturally cause a rerun anyway.
 
 def render_landing_page():
     """Renders the first-time visit landing page with 100vh flex centering."""
