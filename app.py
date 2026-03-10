@@ -2192,45 +2192,81 @@ elif st.session_state.current_page == 'Soft Constraints':
 elif st.session_state.current_page == 'Generate Schedule':
     st.header("Generate Schedule")
     
+    # Initialize a session state for selected department
+    if 'gen_selected_dept_id' not in st.session_state:
+        st.session_state.gen_selected_dept_id = None
+
+    # --- 1. Department Selection (Cards) ---
+    st.subheader("🏢 Select Department")
+    dept_options = {d['id']: d['name'] for d in st.session_state.departments}
+    if not dept_options:
+        st.warning("No departments found. Please add a department in 'Manage Departments' first.")
+        st.stop()
+        
+    # Create a grid for cards
+    num_cols = 3
+    cols = st.columns(num_cols)
+    
+    for i, (d_id, d_name) in enumerate(dept_options.items()):
+        col_idx = i % num_cols
+        
+        # Count nurses for this department
+        d_nurses_count = sum(1 for n in st.session_state.nurses if n.get('department_id') == d_id)
+        
+        with cols[col_idx]:
+            is_selected = st.session_state.gen_selected_dept_id == d_id
+            border_color = "primary" if is_selected else "secondary"
+            with st.container(border=True):
+                if is_selected:
+                    st.markdown(f"### ✨ {d_name}")
+                else:
+                    st.markdown(f"### {d_name}")
+                st.write(f"👥 {d_nurses_count} Nurses")
+                
+                # Dynamic function factory for callbacks
+                def make_set_dept(dept_id):
+                    def set_dept():
+                        st.session_state.gen_selected_dept_id = dept_id
+                        st.session_state.last_schedule = None # Reset schedule on dept change
+                    return set_dept
+                
+                btn_label = "Selected" if is_selected else "Select"
+                btn_type = "primary" if is_selected else "secondary"
+                st.button(btn_label, key=f"btn_sel_dept_{d_id}", on_click=make_set_dept(d_id), type=btn_type, use_container_width=True)
+                
+    selected_dept_id = st.session_state.gen_selected_dept_id
+    if not selected_dept_id:
+        st.info("👆 Please select a department above to continue.")
+        st.stop()
+
+    selected_dept_name = dept_options.get(selected_dept_id, "Unknown")
+    dept_nurses = [n for n in st.session_state.nurses if n.get('department_id') == selected_dept_id]
+
     # --- 0. Local Date & Data Sync ---
     roster_start = st.session_state.roster_start_date
     roster_end = st.session_state.roster_end_date
     planning_horizon = (roster_end - roster_start).days + 1
     date_labels = [(roster_start + timedelta(days=d)).strftime("%a, %b %d") for d in range(planning_horizon)]
 
-    # --- 1. Schedule Setup Section (Top) ---
+    # --- 2. Schedule Setup Section (Top) ---
     with st.container(border=True):
-        st.subheader("🛠️ Schedule Setup")
-        col_s1, col_s2 = st.columns([1, 1])
+        st.subheader(f"🛠️ Schedule Setup for {selected_dept_name}")
         
-        with col_s1:
-            dept_options = {d['id']: d['name'] for d in st.session_state.departments}
-            selected_dept_id = st.selectbox(
-                "Select Department",
-                options=list(dept_options.keys()),
-                format_func=lambda x: dept_options[x],
-                key="gen_dept_selector"
-            )
-            selected_dept_name = dept_options.get(selected_dept_id, "Unknown")
-            
-            # Filter nurses for display metrics
-            dept_nurses = [n for n in st.session_state.nurses if n.get('department_id') == selected_dept_id]
-            st.info(f"👥 **{len(dept_nurses)}** Nurses | 📅 **{planning_horizon}** Days")
+        st.info(f"👥 **{len(dept_nurses)}** Nurses | 📅 **{planning_horizon}** Days")
 
-        with col_s2:
-            selected_range = st.date_input(
-                "Roster Period",
-                value=(roster_start, roster_end),
-                min_value=date(2024, 1, 1),
-                max_value=date(2026, 12, 31),
-                key="gen_date_picker"
-            )
-            if isinstance(selected_range, tuple) and len(selected_range) == 2:
-                if selected_range[0] != roster_start or selected_range[1] != roster_end:
-                    st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
-                    st.session_state.last_schedule = None # Reset to trigger auto-load/fresh gen
-                    st.rerun()
-            st.write(f"**Selected Range:** {roster_start.strftime('%d %b')} – {roster_end.strftime('%d %b')}")
+        selected_range = st.date_input(
+            "Roster Period",
+            value=(roster_start, roster_end),
+            min_value=date(2024, 1, 1),
+            max_value=date(2026, 12, 31),
+            key="gen_date_picker"
+        )
+        if isinstance(selected_range, tuple) and len(selected_range) == 2:
+            if selected_range[0] != roster_start or selected_range[1] != roster_end:
+                st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
+                st.session_state.last_schedule = None # Reset to trigger auto-load/fresh gen
+                st.rerun()
+        st.caption(f"**Selected Range:** {roster_start.strftime('%d %b')} – {roster_end.strftime('%d %b')}")
 
         st.markdown("<br>", unsafe_allow_html=True)
         gen_btn = st.button("🚀 Generate Optimized Schedule", type="primary", use_container_width=True)
@@ -2535,6 +2571,24 @@ elif st.session_state.current_page == 'Generate Schedule':
                     locked_comp_data[n_name] = {}
                 locked_comp_data[n_name][d_idx] = True
 
+            nurse_details = {}
+            for n in st.session_state.nurses:
+                if n['name'] in nurse_names:
+                    dept_name = next((d['name'] for d in st.session_state.departments if d['id'] == n.get('department_id')), "Unknown")
+                    nurse_details[n['name']] = {
+                        "department": dept_name,
+                        "grade": n.get('grade', 'RN')
+                    }
+            
+            if 'cell_remarks' not in st.session_state:
+                st.session_state.cell_remarks = {}
+                
+            remarks = {}
+            for (n_name, d_idx), rmk in st.session_state.cell_remarks.items():
+                if n_name not in remarks:
+                    remarks[n_name] = {}
+                remarks[n_name][d_idx] = rmk
+
             shift_colors = {s['code']: s.get('color', '#E0E0E0') for s in st.session_state.shifts}
             shift_colors['-'] = '#FFFFFF'
 
@@ -2545,21 +2599,36 @@ elif st.session_state.current_page == 'Generate Schedule':
                 schedule_data=df_schedule.to_dict(orient='list'),
                 shift_colors=shift_colors,
                 locked_assignments=locked_comp_data,
+                nurse_details=nurse_details,
+                remarks=remarks,
                 zoom_level=st.session_state.zoom_level,
                 painter_shift=st.session_state.painter_shift,
                 key="professional_roster_grid"
             )
 
             if edit_event:
-                # edit_event is {nurse: str, day: int, shift: str}
+                # edit_event is {nurse: str, day: int, shift: str, locked: bool, remark: str}
                 n_name = edit_event['nurse']
                 d_idx = edit_event['day']
-                new_shift = edit_event['shift']
+                new_shift = edit_event.get('shift')
+                is_locked = edit_event.get('locked', False)
+                remark = edit_event.get('remark', '')
+                
+                # Update schedule data immediately for the next render
+                if new_shift is not None:
+                    st.session_state.last_schedule[n_name][d_idx] = new_shift
                 
                 # Update locks
-                st.session_state.locked_assignments[(n_name, d_idx)] = new_shift
-                # Update schedule data immediately for the next render
-                st.session_state.last_schedule[n_name][d_idx] = new_shift
+                if is_locked and new_shift is not None:
+                    st.session_state.locked_assignments[(n_name, d_idx)] = new_shift
+                elif not is_locked and (n_name, d_idx) in st.session_state.locked_assignments:
+                    del st.session_state.locked_assignments[(n_name, d_idx)]
+                    
+                # Update remarks
+                if remark:
+                    st.session_state.cell_remarks[(n_name, d_idx)] = remark
+                elif (n_name, d_idx) in st.session_state.cell_remarks:
+                    del st.session_state.cell_remarks[(n_name, d_idx)]
                 
                 # --- Automated Save on Edit ---
                 try:

@@ -89,6 +89,7 @@
             font-weight: 600;
             font-size: var(--font-size);
             transition: all 0.15s ease;
+            position: relative;
         }
 
         .shift-cell:hover {
@@ -105,18 +106,96 @@
             border-radius: 4px;
         }
 
-        .night-indicator {
-            width: 8px;
-            height: 8px;
-            background: #6366f1;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 4px;
-        }
-
         /* Painter active style */
         .painting-mode .shift-cell {
             cursor: cell;
+        }
+
+        /* Remark marker */
+        .remark-marker {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 6px solid #f59e0b; /* Amber */
+            transform: rotate(45deg);
+        }
+
+        /* Tooltip Modal Styles */
+        #cell-modal {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 16px;
+            border-radius: 8px;
+            z-index: 1000;
+            width: 240px;
+            font-family: inherit;
+        }
+
+        #cell-modal label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        #cell-modal select, #cell-modal textarea {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+
+        #cell-modal select:focus, #cell-modal textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 1px #3b82f6;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .modal-buttons button {
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-cancel {
+            background: white;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+        }
+
+        .btn-cancel:hover {
+            background: #f8fafc;
+        }
+
+        .btn-save {
+            background: #3b82f6;
+            border: 1px solid #3b82f6;
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #2563eb;
         }
     </style>
 </head>
@@ -130,6 +209,34 @@
         </div>
     </div>
 
+    <!-- Interactive Tooltip Modal -->
+    <div id="cell-modal">
+        <div style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-bottom: 2px;" id="modal-title">Name - Date</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 12px; font-weight: 500;" id="modal-subtitle">Dept | Grade</div>
+        
+        <div style="margin-bottom: 12px;">
+            <label for="modal-shift">Assigned Shift / Leave</label>
+            <select id="modal-shift"></select>
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; cursor: pointer; color: #334155; font-size: 0.875rem; font-weight: 500;">
+                <input type="checkbox" id="modal-locked" style="margin-right: 6px; width: 14px; height: 14px; cursor: pointer;"> 
+                Lock Assignment
+            </label>
+        </div>
+        
+        <div>
+            <label for="modal-remark">Remarks</label>
+            <textarea id="modal-remark" rows="2" placeholder="Add note..."></textarea>
+        </div>
+        
+        <div class="modal-buttons">
+            <button class="btn-cancel" onclick="closeTooltip()">Cancel</button>
+            <button class="btn-save" onclick="saveTooltip()">Apply</button>
+        </div>
+    </div>
+
     <script>
         let isMouseDown = false;
         let currentPainterShift = null;
@@ -138,14 +245,25 @@
         let scheduleData = {};
         let dateLabels = [];
         let nurseNames = [];
+        
+        // New Data
+        let nurseDetails = {};
+        let remarks = {};
+        
+        // Modal State
+        let activeCell = null;
 
         function onStreamlitRender(event) {
             const data = event.detail.args;
-            nurseNames = data.nurse_names;
-            dateLabels = data.date_labels;
-            scheduleData = data.schedule_data;
-            shiftColors = data.shift_colors;
+            nurseNames = data.nurse_names || [];
+            dateLabels = data.date_labels || [];
+            scheduleData = data.schedule_data || {};
+            shiftColors = data.shift_colors || {};
             lockedAssignments = data.locked_assignments || {};
+            
+            nurseDetails = data.nurse_details || {};
+            remarks = data.remarks || {};
+            
             currentPainterShift = data.painter_shift;
             
             const zoom = (data.zoom_level || 100) / 100;
@@ -153,6 +271,20 @@
             container.style.transform = `scale(${zoom})`;
             
             renderRoster();
+            populateShiftDropdown();
+        }
+
+        function populateShiftDropdown() {
+            const select = document.getElementById('modal-shift');
+            select.innerHTML = '';
+            
+            // Add options based on shiftColors keys
+            Object.keys(shiftColors).forEach(shiftCode => {
+                const opt = document.createElement('option');
+                opt.value = shiftCode;
+                opt.textContent = shiftCode === '-' ? 'None / Off' : shiftCode;
+                select.appendChild(opt);
+            });
         }
 
         function renderRoster() {
@@ -173,11 +305,14 @@
             nurseNames.forEach(name => {
                 bodyHtml += `<tr><td class="sticky-col">${name}</td>`;
                 dateLabels.forEach((label, dIdx) => {
-                    const shiftCode = scheduleData[name][dIdx] || '-';
+                    const shiftCode = scheduleData[name] ? (scheduleData[name][dIdx] || '-') : '-';
                     const isWeekend = label.includes('Sat') || label.includes('Sun');
                     const isLocked = lockedAssignments[name] && lockedAssignments[name][dIdx];
+                    const hasRemark = remarks[name] && remarks[name][dIdx];
                     const bgColor = shiftColors[shiftCode] || '#ffffff';
+                    
                     const lockIcon = isLocked ? '<span style="color: #ef4444; font-size: 0.6rem; vertical-align: top; margin-left: 2px;">🔒</span>' : '';
+                    const remarkIcon = hasRemark ? '<div class="remark-marker" title="Has remark"></div>' : '';
                     
                     bodyHtml += `
                         <td class="shift-cell ${isWeekend ? 'weekend' : ''} ${isLocked ? 'locked' : ''}" 
@@ -185,7 +320,8 @@
                             style="background-color: ${bgColor};"
                             onmousedown="startPaint(event)"
                             onmouseover="doPaint(event)"
-                        >${shiftCode}${lockIcon}</td>
+                            onclick="handleCellClick(event)"
+                        >${shiftCode}${lockIcon}${remarkIcon}</td>
                     `;
                 });
                 bodyHtml += '</tr>';
@@ -200,14 +336,14 @@
         }
 
         function startPaint(e) {
-            if (!currentPainterShift) return;
+            if (!currentPainterShift || e.button !== 0) return; // Only left click for paint
             isMouseDown = true;
-            paintCell(e.target);
+            paintCell(e.currentTarget);
         }
 
         function doPaint(e) {
             if (isMouseDown && currentPainterShift) {
-                paintCell(e.target);
+                paintCell(e.currentTarget);
             }
         }
 
@@ -219,13 +355,15 @@
 
             cell.innerText = currentPainterShift;
             cell.style.backgroundColor = shiftColors[currentPainterShift] || '#ffffff';
-            cell.classList.add('locked');
+            cell.classList.add('locked'); // Painting locks it implicitly
             
             // Notify Streamlit
             Streamlit.setComponentValue({
                 nurse: nurse,
                 day: day,
-                shift: currentPainterShift
+                shift: currentPainterShift,
+                locked: true,
+                remark: (remarks[nurse] && remarks[nurse][day]) || ''
             });
         }
 
@@ -233,17 +371,102 @@
             isMouseDown = false;
         });
 
+        // Tooltip interaction
+        function handleCellClick(e) {
+            // Do not open tooltip if in painter mode
+            if (currentPainterShift) return;
+
+            const cell = e.currentTarget;
+            const nurse = cell.dataset.nurse;
+            const dayIdx = parseInt(cell.dataset.day);
+            
+            activeCell = { nurse, dayIdx };
+            
+            // Populate modal data
+            document.getElementById('modal-title').textContent = `${nurse} • ${dateLabels[dayIdx]}`;
+            
+            const details = nurseDetails[nurse] || { department: "Unknown", grade: "Rank" };
+            document.getElementById('modal-subtitle').textContent = `${details.department} | ${details.grade}`;
+            
+            const currentShift = scheduleData[nurse] ? (scheduleData[nurse][dayIdx] || '-') : '-';
+            document.getElementById('modal-shift').value = currentShift;
+            
+            document.getElementById('modal-locked').checked = !!(lockedAssignments[nurse] && lockedAssignments[nurse][dayIdx]);
+            
+            document.getElementById('modal-remark').value = (remarks[nurse] && remarks[nurse][dayIdx]) || '';
+            
+            // Position modal relative to viewport, handling bounds
+            const modal = document.getElementById('cell-modal');
+            modal.style.display = 'block';
+            
+            const cellRect = cell.getBoundingClientRect();
+            const modalRect = modal.getBoundingClientRect();
+            
+            let top = cellRect.bottom + 5;
+            let left = cellRect.left + (cellRect.width / 2) - (modalRect.width / 2);
+            
+            // Boundary checks
+            if (left < 10) left = 10;
+            if (left + modalRect.width > window.innerWidth - 10) left = window.innerWidth - modalRect.width - 10;
+            
+            // If tooltip goes off bottom of screen, show it above the cell
+            if (top + modalRect.height > window.innerHeight - 10) {
+                top = cellRect.top - modalRect.height - 5;
+            }
+            
+            modal.style.top = `${top}px`;
+            modal.style.left = `${left}px`;
+            
+            // Focus on first input
+            document.getElementById('modal-shift').focus();
+            
+            // Stop event to prevent document click handler from immediately closing it
+            e.stopPropagation();
+        }
+
+        function closeTooltip() {
+            document.getElementById('cell-modal').style.display = 'none';
+            activeCell = null;
+        }
+
+        function saveTooltip() {
+            if (!activeCell) return;
+            
+            const { nurse, dayIdx } = activeCell;
+            const shift = document.getElementById('modal-shift').value;
+            const locked = document.getElementById('modal-locked').checked;
+            const remark = document.getElementById('modal-remark').value;
+            
+            // Send to Streamlit
+            Streamlit.setComponentValue({
+                nurse: nurse,
+                day: dayIdx,
+                shift: shift,
+                locked: locked,
+                remark: remark
+            });
+            
+            closeTooltip();
+        }
+
+        // Close tooltip when clicking outside
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('cell-modal');
+            if (modal.style.display === 'block' && !modal.contains(e.target) && !e.target.closest('.shift-cell')) {
+                closeTooltip();
+            }
+        });
+
+        // Initial setup
         Streamlit.setComponentReady();
         Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onStreamlitRender);
 
-        // Adjust wrapper height to Streamlit frame
         function setFrameHeight() {
             const height = document.getElementById('roster-wrapper').scrollHeight;
             Streamlit.setFrameHeight(height);
         }
         window.addEventListener('resize', setFrameHeight);
         
-        // Ensure height is correct after render
         setInterval(setFrameHeight, 1000); 
         setTimeout(setFrameHeight, 100);
         setTimeout(setFrameHeight, 500);
