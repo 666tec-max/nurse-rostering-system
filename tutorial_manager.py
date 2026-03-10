@@ -96,11 +96,15 @@ def initialize_tutorial_state():
     if 'cert_user_name' not in st.session_state:
         st.session_state.cert_user_name = ""
 
-    # 2. Skip cookie loading if we just performed a reset in this session
-    if st.session_state.get('just_reset'):
-        # Clear the flag but do NOT reload cookies — the reset state is authoritative
-        st.session_state.just_reset = False
-        return
+    # 2. Skip cookie loading for several runs after a reset.
+    #    Cookie writes in extra-streamlit-components are async (JS bridge), so the
+    #    old cookie can survive multiple reruns before the cleared value is visible.
+    #    We use a countdown counter instead of a one-shot boolean to guard all runs
+    #    until the browser has actually stored the new value.
+    skip_runs = st.session_state.get('skip_cookie_load_runs', 0)
+    if skip_runs > 0:
+        st.session_state.skip_cookie_load_runs = skip_runs - 1
+        return  # authoritative reset state is in session_state — do NOT touch it
 
     # 3. Load from unified cookie
     if 'cookie_manager' in st.session_state:
@@ -189,11 +193,17 @@ def add_visited_module(module_id):
         sync_state_to_cookies()
 
 def reset_tutorial():
-    """Resets the tutorial progress, clears cookies, and immediately redirects to the tutorial menu."""
-    # Set the just_reset flag FIRST so initialize_tutorial_state skips cookie loading on the next run
+    """Resets tutorial progress, clears cookies, and immediately redirects to the tutorial menu."""
+    # Block cookie loading for the next 5 reruns.
+    # Cookie writes in extra-streamlit-components go through a JS bridge and may not
+    # be visible in the browser for 2-3 render cycles.  A countdown of 5 ensures the
+    # cleared cookie is authoritative before we allow reading again.
+    st.session_state.skip_cookie_load_runs = 5
+
+    # Also keep the legacy one-shot flag for backward-compat with any other checks
     st.session_state.just_reset = True
-    
-    # Clear all tutorial state
+
+    # Clear all tutorial state in session
     st.session_state.completed_tutorials = set()
     st.session_state.tutorial_started = False
     st.session_state.tutorial_finished = False
@@ -203,17 +213,25 @@ def reset_tutorial():
     st.session_state.current_tutorial_module = None
     st.session_state.certificate_earned_date = None
     st.session_state.cert_user_name = ""
-    
-    # Clear cookies (both unified and legacy)
+    # Clear the one-time celebration flag so the next certificate visit works
+    st.session_state._cert_celebrated = False
+
+    # Overwrite the cookie with the cleared state so any browser reads get clean data
     if 'cookie_manager' in st.session_state:
         cm = st.session_state.cookie_manager
+        import json
+        cleared_state = json.dumps({
+            "visited_modules": [],
+            "tutorial_started": False,
+            "tutorial_finished": False,
+            "certificate_earned_date": None
+        })
         st.session_state.sync_count = st.session_state.get('sync_count', 0) + 1
         sync_key = f"reset_state_{st.session_state.sync_count}"
-        # Write empty state to overwrite old cookie immediately
-        cm.set(cookie="nurse_tutorial_state", val="{}", key=sync_key)
+        cm.set(cookie="nurse_tutorial_state", val=cleared_state, key=sync_key)
         cm.set(cookie="tutorial_completed", val="false", key=sync_key + "_leg")
-    
-    # Force immediate re-run so the new state takes effect before anything else fires
+
+    # Force immediate re-run so the cleared state takes effect before anything else fires
     st.rerun()
 
 def render_landing_page():
