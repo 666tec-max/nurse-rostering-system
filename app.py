@@ -1363,7 +1363,192 @@ def render_manage_staffs():
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 2. Search, Filter, and Sort Bar
+    # 2. Bulk Actions: Export & Import
+    c_ex1, c_ex2 = st.columns(2)
+    
+    with c_ex1:
+        with st.expander("📤 Export Staff to Excel", expanded=False):
+            st.write("Download all current personnel details as an Excel file.")
+            
+            # Prepare export data
+            if st.session_state.nurses:
+                export_rows = []
+                dept_map = {d['id']: d['name'] for d in st.session_state.departments}
+                for n in st.session_state.nurses:
+                    export_rows.append({
+                        "Name": n.get('name', ''),
+                        "Employee ID": n.get('employee_id', ''),
+                        "Grade": n.get('grade', 'RN'),
+                        "Department": dept_map.get(n.get('department_id'), 'Unassigned'),
+                        "Skills": ", ".join(n.get('skills', []))
+                    })
+                
+                df_export = pd.DataFrame(export_rows)
+                
+                # Buffer for Excel
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_export.to_excel(writer, index=False, sheet_name='Personnel')
+                excel_data = output.getvalue()
+                
+                st.download_button(
+                    label="📥 Download Personnel.xlsx",
+                    data=excel_data,
+                    file_name=f"personnel_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="staff_export_btn"
+                )
+            else:
+                st.info("No personnel data to export.")
+
+    with c_ex2:
+        with st.expander("📥 Import Staff from Excel", expanded=False):
+            st.write("Upload an Excel (.xlsx) or CSV file to bulk add/update personnel.")
+            uploaded_file = st.file_uploader("Choose a file", type=['xlsx', 'csv'], key="staff_uploader")
+            
+            if uploaded_file:
+                try:
+                    if uploaded_file.name.endswith('.csv'):
+                        df_import = pd.read_csv(uploaded_file)
+                    else:
+                        df_import = pd.read_excel(uploaded_file, engine='openpyxl')
+                    
+                    st.write("Preview of imported data:")
+                    st.dataframe(df_import.head(), use_container_width=True)
+                    
+                    if st.button("🚀 Process Import", type="primary", use_container_width=True):
+                        # Required columns: Name, Grade, Department
+                        # Optional: Employee ID, Skills
+                        required_cols = ['Name', 'Grade', 'Department']
+                        missing_cols = [c for c in required_cols if c not in df_import.columns]
+                        
+                        if missing_cols:
+                            st.error(f"Missing required columns: {', '.join(missing_cols)}")
+                        else:
+                            import_results = {"added": 0, "updated": 0, "errors": []}
+                            
+                            # Prepare lookups
+                            dept_rev_map = {d['name'].lower(): d['id'] for d in st.session_state.departments}
+                            existing_ids = {n['employee_id'] for n in st.session_state.nurses}
+                            existing_skills = {sk['code'] for sk in st.session_state.skills}
+                            
+                            for idx, row in df_import.iterrows():
+                                name = str(row.get('Name', '')).strip()
+                                # Convert Employee ID to string safely
+                                raw_emp_id = row.get('Employee ID')
+                                if pd.isna(raw_emp_id) or str(raw_emp_id).lower() == 'nan' or not str(raw_emp_id).strip():
+                                    emp_id = ""
+                                else:
+                                    emp_id = str(raw_emp_id).strip()
+                                    
+                                grade = str(row.get('Grade', 'RN')).strip()
+                                dept_name = str(row.get('Department', '')).strip().lower()
+                                skills_str = str(row.get('Skills', '')).strip() if pd.notna(row.get('Skills')) else ""
+                                
+                                # Basic validation
+                                if not name or not grade or not dept_name:
+                                    import_results["errors"].append(f"Row {idx+2}: Missing Name, Grade, or Department.")
+                                    continue
+                                
+                                # Resolve department
+                                dept_id = dept_rev_map.get(dept_name)
+                                if not dept_id:
+                                    # Try a partial match if exact fails
+                                    match = next((id for name, id in dept_rev_map.items() if dept_name in name or name in dept_name), None)
+                                    if match:
+                                        dept_id = match
+                                    else:
+                                        import_results["errors"].append(f"Row {idx+2}: Department '{dept_name}' not found.")
+                                        continue
+                                
+                                # Determine if it's an Add or Update
+                                is_update = False
+                                if row.get('Employee ID') and str(row.get('Employee ID')).strip() in [n['employee_id'] for n in st.session_state.nurses]:
+                                    is_update = True
+                                    emp_id = str(row.get('Employee ID')).strip()
+                                
+                                # Handle ID Generation/Uniqueness ONLY if not update
+                                if not is_update:
+                                    if not emp_id:
+                                        # Auto-generate
+                                        prefix = f"{grade}-"
+                                        max_num = 0
+                                        for n_id in existing_ids:
+                                            if n_id.startswith(prefix):
+                                                suffix = n_id[len(prefix):]
+                                                if suffix.isdigit():
+                                                    max_num = max(max_num, int(suffix))
+                                        emp_id = f"{prefix}{max_num + 1:02d}"
+                                        existing_ids.add(emp_id)
+                                    elif emp_id in existing_ids:
+                                        # Duplicate ID provided but user might want a new record? 
+                                        # To follow "update" requirement, if provided ID exists, we update.
+                                        # But wait, I already set is_update logic above.
+                                        pass 
+                                    else:
+                                        existing_ids.add(emp_id)
+                                
+                                # Resolve Skills
+                                row_skills = []
+                                if skills_str:
+                                    raw_skills = [s.strip() for s in skills_str.split(',') if s.strip()]
+                                    for rs in raw_skills:
+                                        if rs in existing_skills:
+                                            row_skills.append(rs)
+                                        else:
+                                            # Create missing skills dynamically
+                                            try:
+                                                supabase.table("skills").insert({"code": rs, "name": rs}).execute()
+                                                existing_skills.add(rs)
+                                                st.session_state.skills.append({"code": rs, "name": rs})
+                                                row_skills.append(rs)
+                                            except:
+                                                pass
+                                
+                                # Construct record (excluding things we don't want to overwrite if updating)
+                                record_data = {
+                                    "employee_id": emp_id,
+                                    "name": name,
+                                    "grade": grade,
+                                    "department_id": dept_id,
+                                    "skills": row_skills
+                                }
+                                
+                                try:
+                                    if is_update:
+                                        staff_db.update_staff(supabase, emp_id, record_data)
+                                        import_results["updated"] += 1
+                                    else:
+                                        # Fill defaults for new records
+                                        record_data.update({
+                                            "allow_night_shift": True,
+                                            "max_consecutive_work_days": 6,
+                                            "leave_days": []
+                                        })
+                                        staff_db.insert_staff(supabase, record_data)
+                                        import_results["added"] += 1
+                                except Exception as e:
+                                    import_results["errors"].append(f"Row {idx+2}: {str(e)}")
+                            
+                            # Refresh state
+                            st.session_state.nurses = staff_db.fetch_all_staff(supabase)
+                            for s in st.session_state.nurses: s['id'] = s['employee_id']
+                            
+                            msg = f"Import Finished! Added {import_results['added']}, Updated {import_results['updated']} records."
+                            if import_results["errors"]:
+                                with st.expander("⚠️ View Import Errors", expanded=True):
+                                    for err in import_results["errors"]:
+                                        st.error(err)
+                            notify("Import Result", msg)
+                            st.rerun()
+
+                except Exception as e:
+                    st.error(f"Error processing file: {e}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 3. Search, Filter, and Sort Bar
     with st.container(border=True):
         sb1, sb2, sb3, sb4, sb5 = st.columns([2, 1, 1, 2, 1.2])
         with sb1:
@@ -2059,10 +2244,7 @@ with st.sidebar:
             st.session_state.current_tutorial_module = None
             st.rerun()
             
-    if st.sidebar.button("✨ Reset Tutorial", use_container_width=True):
-        tutorial_manager.reset_tutorial()
-        st.rerun()
-
+            
 # ---------------------------------------------------------------------
 # Main Layout: Content Tracking & Navigation
 # ---------------------------------------------------------------------
