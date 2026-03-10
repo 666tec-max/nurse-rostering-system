@@ -1025,6 +1025,7 @@ def render_manage_grades():
 
 
 def render_manage_leave_types():
+    st.subheader("Manage Leave Type")
     with st.expander("Add New Leave Type", expanded=False):
         with st.form("add_leave_form", clear_on_submit=True):
             col_code, col_name, col_paid = st.columns([1, 2, 1])
@@ -1256,7 +1257,7 @@ def delete_staff_dialog(staff_member):
                 st.error(f"Error deleting staff: {e}")
 
 def render_manage_staffs():
-    st.subheader("👥 Personnel Management")
+    st.subheader("👥 Manage Staff")
     
     # --- Custom CSS for Table Styling ---
     st.markdown("""
@@ -2209,40 +2210,65 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = 'Generate Schedule'
 
 with st.sidebar:
-
-    st.markdown('### Main Page')
+    st.markdown('<div style="margin-top: -30px;"></div>', unsafe_allow_html=True)
+    st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>Main Page</span>", unsafe_allow_html=True)
     st.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
 
-    st.markdown('### Settings')
-
-    with st.expander("⚙️ General Settings", expanded=False):
-        st.button("🎨 Theme", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
-        st.button("ℹ️ Hard Constraints", on_click=lambda: st.session_state.update(current_page='Hard Constraints'), use_container_width=True)
+    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+    st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>⚙️ Theme Settings</span>", unsafe_allow_html=True)
+    with st.expander("⚙️ Theme Settings", expanded=False):
+        st.button("🎨 Theme Settings", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
+        st.button("🛡️ Hard Constraints", on_click=lambda: st.session_state.update(current_page='Hard Constraints'), use_container_width=True)
         st.button("⚖️ Soft Constraints", on_click=lambda: st.session_state.update(current_page='Soft Constraints'), use_container_width=True)
 
+    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+    st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>🔐 Admin Database</span>", unsafe_allow_html=True)
     with st.expander("🔐 Admin Database", expanded=False):
         st.button("🏢 Manage Departments", on_click=lambda: st.session_state.update(current_page='Manage Departments'), use_container_width=True)
         st.button("🗓️ Manage Shifts", on_click=lambda: st.session_state.update(current_page='Manage Shifts'), use_container_width=True)
         st.button("🔧 Manage Skills", on_click=lambda: st.session_state.update(current_page='Manage Skills'), use_container_width=True)
         st.button("🏆 Grades Hierarchy", on_click=lambda: st.session_state.update(current_page='Grades Hierarchy'), use_container_width=True)
-        st.button("🏖️ Leave Types", on_click=lambda: st.session_state.update(current_page='Leave Types'), use_container_width=True)
-        st.button("👥 Manage Staffs", on_click=lambda: st.session_state.update(current_page='Manage Staffs'), use_container_width=True)
+        st.button("🏖️ Leave Type", on_click=lambda: st.session_state.update(current_page='Leave Type'), use_container_width=True)
+        st.button("👥 Manage Staff", on_click=lambda: st.session_state.update(current_page='Manage Staff'), use_container_width=True)
         st.button("📊 Minimum Demand", on_click=lambda: st.session_state.update(current_page='Minimum Demand'), use_container_width=True)
 
-    st.markdown("---")
-    
-    # Tutorial Progress/Certificate Section
-    if st.session_state.get('tutorial_started') or st.session_state.get('tutorial_finished'):
-        tutorial_manager.render_sidebar_progress()
-        st.markdown("---")
-    
-    # Persistent Start Tutorial button
-    if not st.session_state.get("tutorial_active") and not st.session_state.get("show_tutorial_landing"):
-        if st.sidebar.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
-            st.session_state.tutorial_active = True
-            st.session_state.show_tutorial_landing = False
-            st.session_state.current_tutorial_module = None
-            st.rerun()
+    # 🏅 Tutorial & Certificate (Dynamic)
+    tutorial_manager.render_sidebar_progress()
+
+    # Sidebar Auto-Collapse Script (Injecting hidden components)
+    st.components.v1.html("""
+        <script>
+            let timeout;
+            const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
+            
+            function collapseAll() {
+                const expanders = sidebar.querySelectorAll('div[data-testid="stExpander"]');
+                expanders.forEach(exp => {
+                    const isExpanded = exp.querySelector('svg[data-testid="stExpanderIcon"]') 
+                                        ? window.getComputedStyle(exp.querySelector('div[aria-expanded="true"]')).display !== 'none'
+                                        : false;
+                    
+                    // Actually check if it's expanded by the aria attribute or inner content visibility
+                    const summary = exp.querySelector('summary') || exp.querySelector('[role="button"]');
+                    const content = exp.querySelector('div[id^="stExpanderContent"]');
+                    if (content && content.offsetHeight > 0) {
+                        summary.click();
+                    }
+                });
+            }
+
+            function resetTimer() {
+                clearTimeout(timeout);
+                timeout = setTimeout(collapseAll, 10000); // 10 seconds inactivity
+            }
+
+            if (sidebar) {
+                sidebar.addEventListener('mousemove', resetTimer);
+                sidebar.addEventListener('mousedown', resetTimer);
+                resetTimer();
+            }
+        </script>
+    """, height=0)
             
             
 # ---------------------------------------------------------------------
@@ -2295,12 +2321,12 @@ elif st.session_state.current_page == 'Grades Hierarchy':
     st.header("Grades Hierarchy")
     render_manage_grades()
 
-elif st.session_state.current_page == 'Leave Types':
-    st.header("Leave Types")
+elif st.session_state.current_page == 'Leave Type':
+    st.header("Leave Type")
     render_manage_leave_types()
 
-elif st.session_state.current_page == 'Manage Staffs':
-    st.header("Manage Staffs")
+elif st.session_state.current_page == 'Manage Staff':
+    st.header("Manage Staff")
     render_manage_staffs()
 
 elif st.session_state.current_page == 'Manage Departments':

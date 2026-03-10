@@ -477,44 +477,75 @@ def render_summary_page():
         st.rerun()
 
 def render_sidebar_progress():
-    """Renders the sidebar progress bar or certificate button."""
+    """Renders the dynamic tutorial navigation button based on progress."""
     total = len(TUTORIAL_MODULES)
-    visited = len(st.session_state.completed_tutorials)
+    completed = list(st.session_state.get('completed_tutorials', []))
+    visited = len(completed)
     
-    if st.session_state.tutorial_finished:
-        st.markdown("<div style='margin-bottom: 5px; font-weight: bold;'>🏅 Tutorial Certificate</div>", unsafe_allow_html=True)
-        if st.sidebar.button("View Certificate", use_container_width=True):
+    # 🏅 Tutorial & Certificate (Dynamic)
+    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+    st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>🏅 Tutorial & Certificate</span>", unsafe_allow_html=True)
+    
+    if visited == 0:
+        if st.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
+            st.session_state.tutorial_active = True
+            st.session_state.show_tutorial_landing = False
+            st.session_state.current_tutorial_module = None
+            st.rerun()
+    elif visited < total:
+        if st.button("🎓 Continue Tutorial", use_container_width=True, type="primary"):
+            st.session_state.tutorial_active = True
+            st.session_state.show_tutorial_landing = False
+            st.session_state.current_tutorial_module = None
+            st.rerun()
+    else:
+        # Progress = 100%
+        if st.button("🏅 Your Certificate", use_container_width=True, type="primary"):
             st.session_state.current_page = "Certificate"
             st.session_state.tutorial_active = False
             st.rerun()
-            
-        if st.sidebar.button("🔄 Reset Tutorial Progress", use_container_width=True):
-            reset_tutorial()
-    else:
-        # Midway or skip users - show progress bar
-        progress_val = int((visited / total) * 10)
-        filled = "█" * progress_val
-        empty = "░" * (10 - progress_val)
-        
+
+    # Progress Bar (optional but nice for context)
+    if 0 < visited < total:
+        progress_percentage = int((visited / total) * 100)
         st.markdown(f"""
-            <div style='margin-bottom: 5px; font-size: 0.9rem;'>
-                <div style='font-weight: bold; margin-bottom: 2px;'>Tutorial Progress</div>
-                <div style='margin-bottom: 5px; color: #555;'>{visited} / {total} modules explored</div>
-                <div style='font-family: monospace; font-size: 1.2rem; letter-spacing: 2px; color: #1E88E5;'>{filled}{empty}</div>
+            <div style='margin-top: 10px; margin-bottom: 5px;'>
+                <div style='background-color: #EEE; border-radius: 4px; height: 6px; overflow: hidden;'>
+                    <div style='background: #4ECDC4; width: {progress_percentage}%; height: 100%;'></div>
+                </div>
+                <div style='display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b; margin-top: 4px;'>
+                    <span>Progress</span>
+                    <span>{progress_percentage}%</span>
+                </div>
             </div>
         """, unsafe_allow_html=True)
-        
-        if st.sidebar.button("🔄 Reset Tutorial Progress", use_container_width=True):
+
+    # Secondary Reset Option
+    with st.expander("🔄 Tutorial Options", expanded=False):
+        if st.button("Reset Progress", use_container_width=True, help="Clear all tutorial data and restart from scratch"):
             reset_tutorial()
 
 def render_certificate():
     """Renders the high-quality styled certificate page with completion date and confetti."""
     # Celebration effect
-    st.snow() # Streamlit built-in snowflake effect is nice, but balloons are better for a certificate
+    st.snow()
     st.balloons()
     
-    completion_date = st.session_state.get('certificate_earned_date', "Today")
+    import datetime
+    # Get current date if not already stored
+    if not st.session_state.get('certificate_earned_date'):
+        st.session_state.certificate_earned_date = datetime.datetime.now().strftime("%B %d, %Y")
     
+    completion_date = st.session_state.certificate_earned_date
+    
+    # User customization
+    col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
+    with col_c2:
+        st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+        user_name = st.text_input("Enter your name for the certificate:", value=st.session_state.get('cert_user_name', 'Valued Professional'))
+        st.session_state.cert_user_name = user_name
+        st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown(f"""
         <style>
         .cert-container {{
@@ -524,38 +555,22 @@ def render_certificate():
             border-style: double;
             text-align: center;
             max-width: 800px;
-            margin: 40px auto;
+            margin: 20px auto;
             color: #333;
             box-shadow: 0 15px 40px rgba(0,0,0,0.15);
             position: relative;
             font-family: 'Inter', sans-serif;
         }}
-        .cert-container::before {{
-            content: "🏥";
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            font-size: 2.5rem;
-            opacity: 0.15;
-        }}
-        .cert-container::after {{
-            content: "⚖️";
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            font-size: 2.5rem;
-            opacity: 0.15;
-        }}
         .cert-header {{
             font-family: 'Playfair Display', serif;
-            font-size: 3.5rem;
+            font-size: 3rem;
             color: #D4AF37;
             text-transform: uppercase;
             margin-bottom: 10px;
             letter-spacing: 2px;
         }}
         .cert-sub {{
-            font-size: 1.6rem;
+            font-size: 1.4rem;
             font-style: italic;
             margin-bottom: 15px;
             color: #555;
@@ -568,13 +583,13 @@ def render_certificate():
             color: #1E1E1E;
         }}
         .cert-desc {{
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             margin-bottom: 30px;
             line-height: 1.6;
         }}
         .cert-date {{
             margin-top: 40px;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: bold;
             color: #555;
         }}
@@ -586,17 +601,12 @@ def render_certificate():
             text-transform: uppercase;
             letter-spacing: 4px;
         }}
-        .stButton > button {{
-            max-width: 300px;
-            margin: 30px auto !important;
-            display: block;
-        }}
         </style>
         
         <div class="cert-container">
             <div class="cert-header">CERTIFICATE OF COMPLETION</div>
             <div class="cert-sub">This certificate is proudly presented to</div>
-            <div class="cert-name">The User</div>
+            <div class="cert-name">{user_name}</div>
             <div class="cert-desc">
                 for successfully exploring and completing<br>
                 all modules in the<br>
@@ -611,8 +621,8 @@ def render_certificate():
         </div>
     """, unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 1, 1])
+    _, col2, _ = st.columns([1, 1, 1])
     with col2:
         if st.button("🎉 Back to System", type="primary", use_container_width=True):
-            st.session_state.current_page = "Theme" # Default starting page
+            st.session_state.current_page = "Generate Schedule"
             st.rerun()
