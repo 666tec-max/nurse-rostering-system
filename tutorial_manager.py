@@ -185,20 +185,15 @@ def reset_tutorial():
     st.session_state.tutorial_started = False
     st.session_state.tutorial_finished = False
     st.session_state.tutorial_active = True
-    st.session_state.show_tutorial_landing = True
+    st.session_state.show_tutorial_landing = False
+    st.session_state.current_page = 'Tutorial Menu'
     st.session_state.current_tutorial_module = None
+    st.session_state.certificate_earned_date = None
     
     # Clear cookies (both unified and legacy)
     if 'cookie_manager' in st.session_state:
         cm = st.session_state.cookie_manager
         
-        def safe_delete(cookie_name, key_val):
-            try:
-                # Use standard set/delete pattern via cookie manager
-                cm.set(cookie=cookie_name, val="", key=key_val) # Clear value
-            except Exception:
-                pass
-                
         # Use sync count logic for unique keys if needed or just delete
         st.session_state.sync_count = st.session_state.get('sync_count', 0) + 1
         sync_key = f"reset_state_{st.session_state.sync_count}"
