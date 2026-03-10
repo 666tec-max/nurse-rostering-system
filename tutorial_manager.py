@@ -5,40 +5,40 @@ import os
 # --- Tutorial Content Configuration ---
 TUTORIAL_MODULES = [
     # Top Row: System Settings / Theme & Constraints
-    {"id": "Theme", "name": "Theme", "icon": "🎨", "color": "#F0F4F8"},
+    {"id": "Theme", "name": "Theme Settings", "icon": "🎨", "color": "#F0F4F8"},
     {"id": "Hard Constraints", "name": "Hard Constraints", "icon": "🛡️", "color": "#E9ECEF"},
     {"id": "Soft Constraints", "name": "Soft Constraints", "icon": "⚖️", "color": "#FEFBF3"},
     # Next Rows: Manage Modules
-    {"id": "Manage Shifts", "name": "Manage Shifts", "icon": "🗓️", "color": "#FFF4E6"},
-    {"id": "Manage Skills", "name": "Manage Skills", "icon": "🔧", "color": "#F3F0FF"},
-    {"id": "Grades Hierarchy", "name": "Manage Grade", "icon": "🏆", "color": "#FFF9DB"},
-    {"id": "Manage Departments", "name": "Manage Departments", "icon": "🏢", "color": "#E8F4FD"},
-    {"id": "Minimum Demand", "name": "Manage Demand", "icon": "📊", "color": "#FFF5F5"},
-    {"id": "Manage Staffs", "name": "Manage Staff", "icon": "👥", "color": "#F8F9FA"},
-    {"id": "Leave Types", "name": "Manage Leave Types", "icon": "🏖️", "color": "#E6FFFA"},
+    {"id": "Manage Shifts", "name": "Shifts", "icon": "🗓️", "color": "#FFF4E6"},
+    {"id": "Manage Skills", "name": "Skills", "icon": "🔧", "color": "#F3F0FF"},
+    {"id": "Grades Hierarchy", "name": "Grades", "icon": "🏆", "color": "#FFF9DB"},
+    {"id": "Manage Departments", "name": "Departments", "icon": "🏢", "color": "#E8F4FD"},
+    {"id": "Minimum Demand", "name": "Minimum Demand", "icon": "📊", "color": "#FFF5F5"},
+    {"id": "Manage Staffs", "name": "Staff", "icon": "👥", "color": "#F8F9FA"},
+    {"id": "Leave Types", "name": "Leave Types", "icon": "🏖️", "color": "#E6FFFA"},
 ]
 
 TUTORIAL_STEPS = {
     "Manage Departments": [
-        {"title": "Welcome to Departments", "text": "This is where you define the different areas of your hospital. Each nurse belongs to one primary department.", "target": "🏢 Manage Departments"},
+        {"title": "Welcome to Departments", "text": "This is where you define the different areas of your hospital. Each nurse belongs to one primary department.", "target": "🏢 Departments"},
         {"title": "Adding a Department", "text": "Click 'Add New Department' to create a new area. You'll need a unique ID and a friendly name.", "target": "Add New Department"},
         {"title": "Managing Lists", "text": "You can edit or delete departments here. Note: You can't delete a department if nurses are still assigned to it!", "target": "Available Departments"},
     ],
     "Manage Shifts": [
-        {"title": "Defining Shifts", "text": "Shifts are the building blocks of your roster. Define when work starts and ends.", "target": "🗓️ Manage Shifts"},
+        {"title": "Defining Shifts", "text": "Shifts are the building blocks of your roster. Define when work starts and ends.", "target": "🗓️ Shifts"},
         {"title": "Shift Colors", "text": "Use colors to make your roster visually easy to read. Night shifts are special and have strict recovery rules!", "target": "Add New Shift"},
     ],
     "Manage Skills": [
-        {"title": "Specializations", "text": "Nurses have different skills (ICU, ER, ACLS). Some shifts might require specific skills to be present.", "target": "🔧 Manage Skills"},
+        {"title": "Specializations", "text": "Nurses have different skills (ICU, ER, ACLS). Some shifts might require specific skills to be present.", "target": "🔧 Skills"},
     ],
     "Grades Hierarchy": [
-        {"title": "The Pyramid", "text": "Grades define seniority. The system uses this to ensure shifts are covered by qualified staff.", "target": "🏆 Grades Hierarchy"},
+        {"title": "The Pyramid", "text": "Grades define seniority. The system uses this to ensure shifts are covered by qualified staff.", "target": "🏆 Grades"},
     ],
     "Leave Types": [
         {"title": "Time Off", "text": "Define types of leave like Annual, Sick, or Unpaid. These are automatically respected during generation.", "target": "🏖️ Leave Types"},
     ],
     "Manage Staffs": [
-        {"title": "Your Personnel", "text": "This is the heart of the system. Manage your nurses, their grades, skills, and department assignments.", "target": "👥 Personnel Management"},
+        {"title": "Your Personnel", "text": "This is the heart of the system. Manage your nurses, their grades, skills, and department assignments.", "target": "👥 Staff"},
         {"title": "Smart Filters", "text": "Use the search and filter bar to quickly find staff by name, grade, or department.", "target": "🔍 Search"},
     ],
     "Minimum Demand": [
@@ -46,7 +46,7 @@ TUTORIAL_STEPS = {
         {"title": "Overrides", "text": "Busy holiday coming up? Use 'Date-Specific Overrides' to adjust demand for specific days.", "target": "Date-Specific Overrides"},
     ],
     "Theme": [
-        {"title": "Personalize", "text": "Choose a look that suits you. Try 'Eye Comfort' for late-night planning!", "target": "Theme Settings"},
+        {"title": "Personalize", "text": "Choose a look that suits you. Try 'Eye Comfort' for late-night planning!", "target": "🎨 Theme Settings"},
     ],
     "Hard Constraints": [
         {"title": "Unbreakable Rules", "text": "These rules are strictly enforced by the AI. No nurse will ever work more than 7 days in a row!", "target": "🛡️ Hard Constraints"},
@@ -491,12 +491,14 @@ def render_sidebar_progress():
             st.session_state.tutorial_active = True
             st.session_state.show_tutorial_landing = False
             st.session_state.current_tutorial_module = None
+            st.session_state.current_page = 'Tutorial Menu'
             st.rerun()
     elif visited < total:
         if st.button("🎓 Continue Tutorial", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
             st.session_state.show_tutorial_landing = False
             st.session_state.current_tutorial_module = None
+            st.session_state.current_page = 'Tutorial Menu'
             st.rerun()
     else:
         # Progress = 100%
@@ -536,14 +538,17 @@ def render_certificate():
     if not st.session_state.get('certificate_earned_date'):
         st.session_state.certificate_earned_date = datetime.datetime.now().strftime("%B %d, %Y")
     
-    completion_date = st.session_state.certificate_earned_date
-    
     # User customization
     col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
     with col_c2:
         st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
-        user_name = st.text_input("Enter your name for the certificate:", value=st.session_state.get('cert_user_name', 'Valued Professional'))
+        user_name = st.text_input("Enter your name for the certificate:", value=st.session_state.get('cert_user_name', 'The User'))
         st.session_state.cert_user_name = user_name
+        
+        # New: Editable Completion Date
+        completion_date = st.text_input("Date of Completion:", value=st.session_state.certificate_earned_date)
+        st.session_state.certificate_earned_date = completion_date
+        
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown(f"""
@@ -560,6 +565,7 @@ def render_certificate():
             box-shadow: 0 15px 40px rgba(0,0,0,0.15);
             position: relative;
             font-family: 'Inter', sans-serif;
+            transition: all 0.5s ease;
         }}
         .cert-header {{
             font-family: 'Playfair Display', serif;

@@ -13,3 +13,4 @@ print("Shifts:", response.data)
 response2 = supabase.table("staff").select("*").execute()
 print("Staff len:", len(response2.data))
 
+s
