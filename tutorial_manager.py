@@ -330,14 +330,14 @@ def render_landing_page():
     # Buttons centered via columns
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
-        if st.button("Start Tutorial →", key="start_tutorial_btn", use_container_width=True, type="primary"):
+        if st.button("Start Tutorial", key="start_tutorial_btn", use_container_width=True, type="primary"):
             st.session_state.tutorial_active = True
             st.session_state.tutorial_started = True
             st.session_state.show_tutorial_landing = False
             sync_state_to_cookies()
             st.rerun()
             
-        if st.button("Explore on Your Own →", key="explore_btn", use_container_width=True):
+        if st.button("Explore on Your Own", key="explore_btn", use_container_width=True):
             st.session_state.show_tutorial_landing = False
             st.session_state.tutorial_active = False
             st.session_state.tutorial_started = True
@@ -488,14 +488,14 @@ def render_sidebar_progress():
     
     with st.expander("🏅 Tutorial & Certificate", expanded=False):
         if visited == 0:
-            if st.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
+            if st.button("Start Tutorial", use_container_width=True, type="primary"):
                 st.session_state.tutorial_active = True
                 st.session_state.show_tutorial_landing = False
                 st.session_state.current_tutorial_module = None
                 st.session_state.current_page = 'Tutorial Menu'
                 st.rerun()
         elif visited < total:
-            if st.button("🎓 Continue Tutorial", use_container_width=True, type="primary"):
+            if st.button("Continue Tutorial", use_container_width=True, type="primary"):
                 st.session_state.tutorial_active = True
                 st.session_state.show_tutorial_landing = False
                 st.session_state.current_tutorial_module = None
@@ -503,12 +503,12 @@ def render_sidebar_progress():
                 st.rerun()
         else:
             # Progress = 100%
-            if st.button("🏅 Your Certificate", use_container_width=True, type="primary"):
+            if st.button("Your Certificate", use_container_width=True, type="primary"):
                 st.session_state.current_page = "Certificate"
                 st.session_state.tutorial_active = False
                 st.rerun()
             
-            if st.button("🔄 Reset Progress", use_container_width=True, help="Clear all tutorial data and restart from scratch"):
+            if st.button("Reset Progress", use_container_width=True, help="Clear all tutorial data and restart from scratch"):
                 reset_tutorial()
 
         # Progress Bar (optional but nice for context)
@@ -550,21 +550,33 @@ def render_certificate():
         
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown(f"""
+    import streamlit.components.v1 as components
+
+    cert_html = f"""
+    <html>
+    <head>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
         <style>
+        body {{
+            font-family: 'Inter', sans-serif;
+            background-color: transparent;
+        }}
+        .cert-wrapper {{
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }}
         .cert-container {{
             background-color: white;
             padding: 60px;
             border: 12px solid #D4AF37; /* Gold Border */
             border-style: double;
             text-align: center;
-            max-width: 800px;
-            margin: 20px auto;
+            width: 800px;
             color: #333;
             box-shadow: 0 15px 40px rgba(0,0,0,0.15);
             position: relative;
-            font-family: 'Inter', sans-serif;
-            transition: all 0.5s ease;
         }}
         .cert-header {{
             font-family: 'Playfair Display', serif;
@@ -579,6 +591,7 @@ def render_certificate():
             font-style: italic;
             margin-bottom: 15px;
             color: #555;
+            font-family: 'Playfair Display', serif;
         }}
         .cert-name {{
             font-size: 2.8rem;
@@ -606,25 +619,65 @@ def render_certificate():
             text-transform: uppercase;
             letter-spacing: 4px;
         }}
+        .download-btn {{
+            display: block;
+            margin: 0 auto 20px auto;
+            background-color: #008080;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }}
+        .download-btn:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }}
         </style>
-        
-        <div class="cert-container">
-            <div class="cert-header">CERTIFICATE OF COMPLETION</div>
-            <div class="cert-sub">This certificate is proudly presented to</div>
-            <div class="cert-name">{user_name}</div>
-            <div class="cert-desc">
-                for successfully exploring and completing<br>
-                all modules in the<br>
-                <b>Nurse Rostering System Tutorial</b>
-            </div>
-            <div class="cert-date">
-                Date of Completion: {completion_date}
-            </div>
-            <div class="cert-footer">
-                CONGRATULATIONS!
+    </head>
+    <body>
+        <button class="download-btn" onclick="downloadPDF()">⬇️ Download Certificate as PDF</button>
+        <div class="cert-wrapper">
+            <div id="certificate" class="cert-container">
+                <div class="cert-header">CERTIFICATE OF COMPLETION</div>
+                <div class="cert-sub">This certificate is proudly presented to</div>
+                <div class="cert-name">{user_name}</div>
+                <div class="cert-desc">
+                    for successfully exploring and completing<br>
+                    all modules in the<br>
+                    <b>Nurse Rostering System Tutorial</b>
+                </div>
+                <div class="cert-date">
+                    Date of Completion: {completion_date}
+                </div>
+                <div class="cert-footer">
+                    CONGRATULATIONS!
+                </div>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+        
+        <script>
+            function downloadPDF() {{
+                const element = document.getElementById('certificate');
+                const opt = {{
+                    margin:       0.5,
+                    filename:     'Nurse_Rostering_Certificate_{user_name.replace(" ", "_")}.pdf',
+                    image:        {{ type: 'jpeg', quality: 0.98 }},
+                    html2canvas:  {{ scale: 2, useCORS: true }},
+                    jsPDF:        {{ unit: 'in', format: 'letter', orientation: 'landscape' }}
+                }};
+                html2pdf().set(opt).from(element).save();
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    
+    components.html(cert_html, height=750, scrolling=True)
     
     _, col2, _ = st.columns([1, 1, 1])
     with col2:
