@@ -482,50 +482,49 @@ def render_sidebar_progress():
     completed = list(st.session_state.get('completed_tutorials', []))
     visited = len(completed)
     
-    # 🏅 Tutorial & Certificate (Dynamic)
+    # 🏅 Tutorial & Certificate (Dropdown Style)
     st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
     st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>🏅 Tutorial & Certificate</span>", unsafe_allow_html=True)
     
-    if visited == 0:
-        if st.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
-            st.session_state.tutorial_active = True
-            st.session_state.show_tutorial_landing = False
-            st.session_state.current_tutorial_module = None
-            st.session_state.current_page = 'Tutorial Menu'
-            st.rerun()
-    elif visited < total:
-        if st.button("🎓 Continue Tutorial", use_container_width=True, type="primary"):
-            st.session_state.tutorial_active = True
-            st.session_state.show_tutorial_landing = False
-            st.session_state.current_tutorial_module = None
-            st.session_state.current_page = 'Tutorial Menu'
-            st.rerun()
-    else:
-        # Progress = 100%
-        if st.button("🏅 Your Certificate", use_container_width=True, type="primary"):
-            st.session_state.current_page = "Certificate"
-            st.session_state.tutorial_active = False
-            st.rerun()
+    with st.expander("🏅 Tutorial & Certificate", expanded=False):
+        if visited == 0:
+            if st.button("🎓 Start Tutorial", use_container_width=True, type="primary"):
+                st.session_state.tutorial_active = True
+                st.session_state.show_tutorial_landing = False
+                st.session_state.current_tutorial_module = None
+                st.session_state.current_page = 'Tutorial Menu'
+                st.rerun()
+        elif visited < total:
+            if st.button("🎓 Continue Tutorial", use_container_width=True, type="primary"):
+                st.session_state.tutorial_active = True
+                st.session_state.show_tutorial_landing = False
+                st.session_state.current_tutorial_module = None
+                st.session_state.current_page = 'Tutorial Menu'
+                st.rerun()
+        else:
+            # Progress = 100%
+            if st.button("🏅 Your Certificate", use_container_width=True, type="primary"):
+                st.session_state.current_page = "Certificate"
+                st.session_state.tutorial_active = False
+                st.rerun()
+            
+            if st.button("🔄 Reset Progress", use_container_width=True, help="Clear all tutorial data and restart from scratch"):
+                reset_tutorial()
 
-    # Progress Bar (optional but nice for context)
-    if 0 < visited < total:
-        progress_percentage = int((visited / total) * 100)
-        st.markdown(f"""
-            <div style='margin-top: 10px; margin-bottom: 5px;'>
-                <div style='background-color: #EEE; border-radius: 4px; height: 6px; overflow: hidden;'>
-                    <div style='background: #4ECDC4; width: {progress_percentage}%; height: 100%;'></div>
+        # Progress Bar (optional but nice for context)
+        if 0 < visited < total:
+            progress_percentage = int((visited / total) * 100)
+            st.markdown(f"""
+                <div style='margin-top: 10px; margin-bottom: 5px;'>
+                    <div style='background-color: #EEE; border-radius: 4px; height: 6px; overflow: hidden;'>
+                        <div style='background: #4ECDC4; width: {progress_percentage}%; height: 100%;'></div>
+                    </div>
+                    <div style='display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b; margin-top: 4px;'>
+                        <span>Progress</span>
+                        <span>{progress_percentage}%</span>
+                    </div>
                 </div>
-                <div style='display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b; margin-top: 4px;'>
-                    <span>Progress</span>
-                    <span>{progress_percentage}%</span>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # Secondary Reset Option
-    with st.expander("🔄 Tutorial Options", expanded=False):
-        if st.button("Reset Progress", use_container_width=True, help="Clear all tutorial data and restart from scratch"):
-            reset_tutorial()
+            """, unsafe_allow_html=True)
 
 def render_certificate():
     """Renders the high-quality styled certificate page with completion date and confetti."""

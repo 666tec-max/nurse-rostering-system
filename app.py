@@ -2242,25 +2242,37 @@ with st.sidebar:
             const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
             
             function collapseAll() {
+                if (!sidebar) return;
                 const expanders = sidebar.querySelectorAll('div[data-testid="stExpander"]');
                 expanders.forEach(exp => {
+                    // Check if content is visible (expanded)
                     const content = exp.querySelector('div[id^="stExpanderContent"]');
                     if (content && content.offsetHeight > 0) {
                         const summary = exp.querySelector('summary') || exp.querySelector('[role="button"]');
-                        if (summary) summary.click();
+                        if (summary) {
+                            // Ensure we only click if it's actually expanded to avoid toggling it open
+                            summary.click();
+                        }
                     }
                 });
             }
 
             function resetTimer() {
                 clearTimeout(timeout);
-                timeout = setTimeout(collapseAll, 10000); // 10 seconds inactivity
+                timeout = setTimeout(collapseAll, 5000); // 5 seconds inactivity
             }
 
             if (sidebar) {
-                ['mousemove', 'mousedown', 'keydown', 'touchstart'].forEach(event => {
-                    sidebar.addEventListener(event, resetTimer);
+                // Listen for any activity in the sidebar
+                ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(event => {
+                    sidebar.addEventListener(event, resetTimer, {passive: true});
                 });
+                
+                // Also listen for clicks on any buttons inside the sidebar which might not trigger mousemove
+                sidebar.querySelectorAll('button').forEach(btn => {
+                    btn.addEventListener('click', resetTimer);
+                });
+
                 resetTimer();
             }
         </script>
