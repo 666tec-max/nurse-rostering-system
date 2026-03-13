@@ -1,35 +1,6 @@
 import streamlit as st
-import pandas as pd
-import json
-import os
-import io
-from datetime import datetime, time, date, timedelta
-import calendar
-from model import NurseRosteringModel
-from supabase import create_client, Client
-import staff_db
-# Professional Roster Component Integration
-from professional_roster_component import professional_roster
 
-try:
-    from auth_utils import render_login_page, log_audit, save_user_prefs, load_user, set_current_user
-except ImportError as e:
-    import streamlit as st
-    st.error(f"ImportError in auth_utils: {e}")
-    import traceback
-    st.code(traceback.format_exc())
-    st.stop()
-import leave_db
-
-# Removed local JSON file references; Supabase is the sole store.
-DEPARTMENTS_DATA_FILE = ""
-SHIFTS_DATA_FILE = ""
-SKILLS_DATA_FILE = ""
-NURSE_DATA_FILE = ""
-GRADES_DATA_FILE = ""
-LEAVES_DATA_FILE = ""
-DEMAND_DATA_FILE = ""
-
+# MUST be the very first Streamlit command
 st.set_page_config(
     page_title="Nurse Rostering System",
     layout="wide",
@@ -40,6 +11,35 @@ st.set_page_config(
         'About': "# Nurse Rostering System\nModern Hospital Staff Management Dashboard."
     }
 )
+
+try:
+    import pandas as pd
+    import json
+    import os
+    import io
+    from datetime import datetime, time, date, timedelta
+    import calendar
+    from model import NurseRosteringModel
+    from supabase import create_client, Client
+    import staff_db
+    from professional_roster_component import professional_roster
+    from auth_utils import render_login_page, log_audit, save_user_prefs, load_user, set_current_user
+    import leave_db
+    import copy
+except Exception as e:
+    st.error(f"Critical Startup Error (Import Phase): {e}")
+    import traceback
+    st.code(traceback.format_exc())
+    st.stop()
+
+# Removed local JSON file references; Supabase is the sole store.
+DEPARTMENTS_DATA_FILE = ""
+SHIFTS_DATA_FILE = ""
+SKILLS_DATA_FILE = ""
+NURSE_DATA_FILE = ""
+GRADES_DATA_FILE = ""
+LEAVES_DATA_FILE = ""
+DEMAND_DATA_FILE = ""
 
 # ---------------------------------------------------------------------
 # Dashboard Design System (CSS)
