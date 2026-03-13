@@ -1,5 +1,4 @@
-import streamlit as st 
-
+import streamlit as st
 import pandas as pd
 import json
 import os
@@ -10,53 +9,19 @@ from model import NurseRosteringModel
 from supabase import create_client, Client
 import staff_db
 from professional_roster_component import professional_roster
-import tutorial_manager
-import extra_streamlit_components as stx
+from auth_utils import render_login_page, log_audit, save_user_prefs, load_user
+import leave_db
+
+# Removed local JSON file references; Supabase is the sole store.
+DEPARTMENTS_DATA_FILE = ""
+SHIFTS_DATA_FILE = ""
+SKILLS_DATA_FILE = ""
+NURSE_DATA_FILE = ""
+GRADES_DATA_FILE = ""
+LEAVES_DATA_FILE = ""
+DEMAND_DATA_FILE = ""
 
 st.set_page_config(page_title="Nurse Rostering System", layout="wide")
-
-# --- Persistent Tutorial State via Cookies ---
-cookie_manager = stx.CookieManager(key="tutorial_mgr")
-st.session_state.cookie_manager = cookie_manager
-
-# Wait 1 tick for cookies to load to prevent mid-progress lobby flash
-if not st.session_state.get('cookie_wait_ready', False):
-    if len(cookie_manager.get_all()) == 0:
-        st.session_state.cookie_wait_ready = True
-        st.stop()
-    st.session_state.cookie_wait_ready = True
-
-is_completed = cookie_manager.get(cookie="tutorial_completed")
-if is_completed == "true" and not st.session_state.get("cookie_checked_flag"):
-    st.session_state.show_tutorial_landing = False
-    st.session_state.cookie_checked_flag = True
-
-# --- Initialize Tutorial ---
-tutorial_manager.initialize_tutorial_state()
-
-if st.session_state.show_tutorial_landing:
-    tutorial_manager.render_landing_page()
-    st.stop()
-
-if st.session_state.get('show_tutorial_summary', False):
-    tutorial_manager.render_summary_page()
-    st.stop()
-
-# Automatic Tutorial Visit Tracking with Error Handling
-# Guard: skip tracking on the same run as a reset to prevent re-adding modules
-if not st.session_state.get('just_reset'):
-    try:
-        if 'current_page' in st.session_state:
-            tutorial_manager.add_visited_module(st.session_state.current_page)
-    except Exception:
-        # Silent fail during page transitions to prevent layout crashes
-        pass
-
-if st.session_state.tutorial_active and st.session_state.current_tutorial_module is None:
-    tutorial_manager.render_tutorial_menu()
-    st.stop()
-
-
 
 # --- Supabase Initialization ---
 try:
@@ -219,13 +184,14 @@ THEME_CSS = {
 
 st.markdown(THEME_CSS.get(st.session_state.theme, ''), unsafe_allow_html=True)
 
-NURSE_DATA_FILE = "nurses.json"
-SHIFTS_DATA_FILE = "shifts.json"
-SKILLS_DATA_FILE = "skills.json"
-DEMAND_DATA_FILE = "demand.json"
-GRADES_DATA_FILE = "grades.json"
-LEAVES_DATA_FILE = "leaves.json"
-DEPARTMENTS_DATA_FILE = "departments.json"
+# ── Auth Gate ──────────────────────────────────────────────────────────
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if not st.session_state.logged_in:
+    render_login_page(supabase)
+    st.stop()
+# ────────────────────────────────────────────────────────────────────────
+
 if 'pending_notification' not in st.session_state:
     st.session_state.pending_notification = None
 if 'last_action_message' not in st.session_state:
@@ -269,7 +235,7 @@ def load_data(table_name, file_path, default_data):
                 for g in response.data:
                     idx = g['layer_index']
                     if idx not in layers: layers[idx] = []
-                    layers[idx].append({"code": g['code'], "name": g['name']})
+                    layers[idx].append({"code": g['code'], "name": g['name'], "colour": g.get("colour", "#FFFFFF")})
                 return [layers[i] for i in sorted(layers.keys())]
             
             if table_name == "demand":
@@ -291,20 +257,14 @@ def load_data(table_name, file_path, default_data):
     except Exception as e:
         st.warning(f"Could not load {table_name} from Supabase: {e}")
 
-    # 2. Fallback to JSON
+    # 2. Fallback to default memory structure if Supabase fails
     json_data = default_data
-    if os.path.exists(file_path):
+    if file_path and os.path.exists(file_path):
         try:
             with open(file_path, "r") as f:
                 loaded = json.load(f)
                 if loaded:
                     json_data = loaded
-                    # AUTO-MIGRATION: If Supabase was empty but JSON has data, push it up!
-                    # This happens "invisibly" the first time a user with local data connects to cloud.
-                    try:
-                        save_data(table_name, file_path, json_data)
-                    except:
-                        pass # Failure here is fine, it will stay in local fallback
         except Exception as e:
             st.error(f"Error loading {file_path}: {e}")
     
@@ -322,7 +282,12 @@ def save_data(table_name, file_path, data):
             flattened = []
             for idx, layer in enumerate(data):
                 for g in layer:
-                    flattened.append({"layer_index": idx, "code": g['code'], "name": g['name']})
+                    flattened.append({
+                        "layer_index": idx, 
+                        "code": g['code'], 
+                        "name": g['name'],
+                        "colour": g.get('colour', '#FFFFFF')
+                    })
             # Clear and repopulate (simple for small config tables)
             supabase.table(table_name).delete().neq("id", -1).execute() # Clear all
             if flattened:
@@ -378,11 +343,11 @@ def save_data(table_name, file_path, data):
             
             # Filter columns to only those present in the database to prevent PostgREST key mismatch crashes
             table_columns = {
-                "staff": ["employee_id", "name", "grade", "leave_days", "skills", "department_id", "allow_night_shift", "max_consecutive_work_days"],
+                "staff": ["employee_id", "name", "grade", "leave_days", "skills", "department_id", "allow_night_shift", "max_consecutive_work_days", "ic_number", "phone", "email"],
                 "shifts": ["id", "code", "name", "start", "end", "duration", "type", "color", "required_skills"],
                 "skills": ["id", "code", "name", "description", "color"],
                 "leaves": ["code", "name", "description", "color", "is_paid"],
-                "departments": ["id", "name", "description"]
+                "departments": ["id", "name", "description", "colour"]
             }
             allowed_keys = table_columns.get(actual_table, [])
             
@@ -410,12 +375,13 @@ def save_data(table_name, file_path, data):
     except Exception as e:
         st.error(f"Supabase Save Error ({table_name}): {e}")
 
-    # Also save to local JSON as backup
-    try:
-        with open(file_path, "w") as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        st.error(f"Local Save Error ({file_path}): {e}")
+    # Optionally save to JSON if a path is provided
+    if file_path:
+        try:
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            st.error(f"Local Save Error ({file_path}): {e}")
 
 # Default Shifts
 DEFAULT_SHIFTS = [
@@ -905,7 +871,8 @@ def render_manage_grades():
                 pyramid_html += '<span class="empty-layer">Empty layer</span>'
             else:
                 for g in layer:
-                    pyramid_html += f'<div class="grade-badge" style="color: {badge_color};"><span class="grade-code">{g["code"]}</span><span class="grade-name">{g["name"]}</span></div>'
+                    g_color = g.get('colour', badge_color)
+                    pyramid_html += f'<div class="grade-badge" style="color: {g_color};"><span class="grade-code">{g["code"]}</span><span class="grade-name">{g["name"]}</span></div>'
             pyramid_html += '</div>'
         pyramid_html += '<div class="seniority-arrow">▼ LEAST SENIOR</div>'
 
@@ -954,12 +921,14 @@ def render_manage_grades():
         with st.expander(f"🔹 Level {i + 1} — {len(layer)} grade(s)", expanded=False):
             # Add grade to this layer
             with st.form(f"add_grade_layer_{i}", clear_on_submit=True):
-                fc1, fc2, fc3 = st.columns([1, 2, 1])
+                fc1, fc2, fc3, fc4 = st.columns([1, 2, 1, 1])
                 with fc1:
                     new_code = st.text_input("Code", key=f"ng_code_{i}", max_chars=5, placeholder="e.g. SN")
                 with fc2:
                     new_name = st.text_input("Full Name", key=f"ng_name_{i}", placeholder="e.g. Senior Nurse")
                 with fc3:
+                    new_color = st.color_picker("Color", "#2C3E50", key=f"ng_color_{i}")
+                with fc4:
                     st.write("")
                     st.write("")
                     submitted = st.form_submit_button("➕ Add Grade", use_container_width=True)
@@ -969,7 +938,7 @@ def render_manage_grades():
                     if new_code.upper() in all_codes:
                         st.error(f"Grade code '{new_code.upper()}' already exists!")
                     else:
-                        st.session_state.grades[i].append({"code": new_code.upper(), "name": new_name})
+                        st.session_state.grades[i].append({"code": new_code.upper(), "name": new_name, "colour": new_color})
                         save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
                         notify("Grade added:", detail=f"'{new_code.upper()}' added to Level {i + 1}")
                         st.rerun()
@@ -1174,6 +1143,15 @@ def edit_staff_dialog(staff_member):
         curr_grade_idx = all_grades.index(staff_member['grade']) if staff_member['grade'] in all_grades else 0
         new_grade = st.selectbox("Grade", all_grades, index=curr_grade_idx)
         
+        # New Extended Fields
+        c_ext1, c_ext2, c_ext3 = st.columns([1, 1, 1])
+        with c_ext1:
+            new_ic = st.text_input("IC Number", value=staff_member.get('ic_number', ''))
+        with c_ext2:
+            new_phone = st.text_input("Phone", value=staff_member.get('phone', ''))
+        with c_ext3:
+            new_email = st.text_input("Email", value=staff_member.get('email', ''))
+
         # Department
         dept_names = [d['name'] for d in st.session_state.departments]
         dept_ids = [d['id'] for d in st.session_state.departments]
@@ -1218,6 +1196,9 @@ def edit_staff_dialog(staff_member):
                 "name": new_name,
                 "grade": new_grade,
                 "department_id": dept_ids[new_dept_idx],
+                "ic_number": new_ic,
+                "phone": new_phone,
+                "email": new_email,
                 "skills": new_skills,
                 "allow_night_shift": new_night,
                 "max_consecutive_work_days": int(new_consec)
@@ -1229,6 +1210,7 @@ def edit_staff_dialog(staff_member):
                 for s in updated_staff: 
                     s['id'] = s['employee_id'] # Map for compatibility
                 st.session_state.nurses = updated_staff
+                log_audit(supabase, st.session_state.current_user, "EDIT_STAFF", {"employee_id": new_id, "old_id": staff_member['employee_id']})
                 notify("Employee Updated", f"Changes saved for {new_name}")
                 st.rerun()
             except Exception as e:
@@ -1257,6 +1239,74 @@ def delete_staff_dialog(staff_member):
                 st.rerun()
             except Exception as e:
                 st.error(f"Error deleting staff: {e}")
+
+@st.dialog("Manage Leave Requests", width="large")
+def leave_requests_dialog(staff_member):
+    st.write(f"**Employee:** {staff_member['name']} ({staff_member['employee_id']})")
+    
+    # 1. Add New Leave Request Form
+    with st.expander("➕ New Leave Request", expanded=False):
+        with st.form("new_leave_req_form", clear_on_submit=True):
+            lc1, lc2 = st.columns(2)
+            with lc1:
+                date_range = st.date_input("Date Range", value=[], key="new_leave_dates")
+            with lc2:
+                leave_opts = {l['code']: l['name'] for l in st.session_state.leaves}
+                leave_type = st.selectbox("Leave Type", list(leave_opts.keys()), format_func=lambda x: leave_opts.get(x, x), key="new_leave_type")
+            
+            hc1, hc2 = st.columns(2)
+            with hc1:
+                status = st.selectbox("Status", ["Approved", "Pending", "Rejected"], key="new_leave_status")
+            with hc2:
+                remarks = st.text_input("Remarks (Optional)", key="new_leave_remarks")
+                
+            if st.form_submit_button("Submit Request", use_container_width=True):
+                if isinstance(date_range, tuple) and len(date_range) == 2:
+                    start_d, end_d = date_range
+                    res = leave_db.insert_leave_request(
+                        supabase=supabase, 
+                        employee_id=staff_member['employee_id'], 
+                        start_date=start_d, 
+                        end_date=end_d, 
+                        leave_type=leave_type, 
+                        status=status, 
+                        remarks=remarks
+                    )
+                    if res is True:
+                        try: log_audit(supabase, st.session_state.current_user, "ADD_LEAVE_REQ", {"employee_id": staff_member['employee_id'], "dates": f"{start_d} to {end_d}"})
+                        except: pass
+                        notify("Leave Requested", f"Added leave for {start_d} to {end_d}")
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {res}")
+                else:
+                    st.error("Please select a valid start and end date.")
+                    
+    st.markdown("---")
+    st.write("**Existing Leave Requests**")
+    
+    reqs = leave_db.fetch_leave_requests(supabase, employee_id=staff_member['employee_id'])
+    if not reqs:
+        st.info("No leave requests found.")
+    else:
+        for r in reqs:
+            rc1, rc2, rc3, rc4 = st.columns([2, 1, 1, 0.5])
+            with rc1:
+                st.write(f"**{r['start_date']}** to **{r['end_date']}**")
+                if r.get("remarks"):
+                    st.caption(f"📝 {r['remarks']}")
+            with rc2:
+                st.write(f"*{r.get('leave_type', 'AL')}*")
+            with rc3:
+                color = "green" if r['status'] == 'Approved' else "orange" if r['status'] == 'Pending' else "red"
+                st.markdown(f"<span style='color:{color}; font-weight:bold;'>{r['status']}</span>", unsafe_allow_html=True)
+            with rc4:
+                if st.button("🗑️", key=f"del_lr_{r['id']}", help="Delete Request"):
+                    leave_db.delete_leave_request(supabase, r['id'])
+                    try: log_audit(supabase, st.session_state.current_user, "DEL_LEAVE_REQ", {"employee_id": staff_member['employee_id'], "leave_id": r['id']})
+                    except: pass
+                    notify("Request Deleted", "Leave request removed successfully.")
+                    st.rerun()
 
 def render_manage_staffs():
     st.subheader("👥 Manage Staff")
@@ -1302,6 +1352,15 @@ def render_manage_staffs():
                 all_grades = [g['code'] for layer in st.session_state.grades for g in layer]
                 add_grade = st.selectbox("Grade", all_grades if all_grades else ["RN"], key="add_staff_grade")
             
+            # New Extened Fields
+            c_ext1, c_ext2, c_ext3 = st.columns([1, 1, 1])
+            with c_ext1:
+                add_ic = st.text_input("IC Number", placeholder="Optional", key="add_staff_ic")
+            with c_ext2:
+                add_phone = st.text_input("Phone", placeholder="Optional", key="add_staff_phone")
+            with c_ext3:
+                add_email = st.text_input("Email", placeholder="Optional", key="add_staff_email")
+
             c4, c5 = st.columns([2, 1])
             with c4:
                 dept_names = [d['name'] for d in st.session_state.departments]
@@ -1344,6 +1403,9 @@ def render_manage_staffs():
                             "name": add_name,
                             "grade": add_grade,
                             "department_id": dept_ids[add_dept_idx],
+                            "ic_number": add_ic,
+                            "phone": add_phone,
+                            "email": add_email,
                             "skills": add_skills,
                             "allow_night_shift": add_night,
                             "max_consecutive_work_days": int(add_consec),
@@ -1354,10 +1416,11 @@ def render_manage_staffs():
                             updated_staff = staff_db.fetch_all_staff(supabase)
                             for s in updated_staff: s['id'] = s['employee_id']
                             st.session_state.nurses = updated_staff
+                            log_audit(supabase, st.session_state.current_user, "ADD_STAFF", {"employee_id": add_id})
                             notify("Employee Added", f"{add_name} added successfully.")
                             
                             # Clear form keys
-                            keys_to_reset = ["add_staff_name", "add_staff_id", "add_staff_grade", "add_staff_dept", "add_staff_night", "add_staff_consec"] + [f"as_skill_{sk}" for sk in skill_options]
+                            keys_to_reset = ["add_staff_name", "add_staff_id", "add_staff_grade", "add_staff_dept", "add_staff_night", "add_staff_consec", "add_staff_ic", "add_staff_phone", "add_staff_email"] + [f"as_skill_{sk}" for sk in skill_options]
                             reset_form_keys(keys_to_reset)
                         except Exception as e:
                             st.error(f"Error adding staff: {e}")
@@ -1383,6 +1446,9 @@ def render_manage_staffs():
                         "Employee ID": n.get('employee_id', ''),
                         "Grade": n.get('grade', 'RN'),
                         "Department": dept_map.get(n.get('department_id'), 'Unassigned'),
+                        "IC Number": n.get('ic_number', ''),
+                        "Phone": n.get('phone', ''),
+                        "Email": n.get('email', ''),
                         "Skills": ", ".join(n.get('skills', []))
                     })
                 
@@ -1448,6 +1514,10 @@ def render_manage_staffs():
                                 grade = str(row.get('Grade', 'RN')).strip()
                                 dept_name = str(row.get('Department', '')).strip().lower()
                                 skills_str = str(row.get('Skills', '')).strip() if pd.notna(row.get('Skills')) else ""
+                                ic_number = str(row.get('IC Number', '')).strip() if pd.notna(row.get('IC Number')) else ""
+                                phone = str(row.get('Phone', '')).strip() if pd.notna(row.get('Phone')) else ""
+                                email = str(row.get('Email', '')).strip() if pd.notna(row.get('Email')) else ""
+                                
                                 
                                 # Basic validation
                                 if not name or not grade or not dept_name:
@@ -1515,6 +1585,9 @@ def render_manage_staffs():
                                     "name": name,
                                     "grade": grade,
                                     "department_id": dept_id,
+                                    "ic_number": ic_number,
+                                    "phone": phone,
+                                    "email": email,
                                     "skills": row_skills
                                 }
                                 
@@ -1622,7 +1695,7 @@ def render_manage_staffs():
             for idx, s in enumerate(filtered_staff):
                 with st.container():
                     st.markdown("<div class='staff-row'>", unsafe_allow_html=True)
-                    r_col_cb, r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([0.5, 2, 1.5, 1, 1.5, 2.5, 1])
+                    r_col_cb, r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([0.5, 2, 1.5, 1, 1.5, 2.3, 1.2])
                     
                     with r_col_cb:
                         st.checkbox("", key=f"bulk_del_{s['employee_id']}", label_visibility="collapsed")
@@ -1643,11 +1716,14 @@ def render_manage_staffs():
                             st.write("<span style='color: #ADB5BD; font-size: 0.8em;'>None</span>", unsafe_allow_html=True)
                     
                     with r_col6:
-                        btn_col1, btn_col2 = st.columns(2)
+                        btn_col1, btn_col2, btn_col3 = st.columns(3)
                         with btn_col1:
                             if st.button("✏️", key=f"edit_{s['employee_id']}_{idx}", help="Edit"):
                                 edit_staff_dialog(s)
                         with btn_col2:
+                            if st.button("🏖️", key=f"leave_{s['employee_id']}_{idx}", help="Manage Leave"):
+                                leave_requests_dialog(s)
+                        with btn_col3:
                             if st.button("🗑️", key=f"del_{s['employee_id']}_{idx}", help="Delete"):
                                 delete_staff_dialog(s)
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -1882,11 +1958,13 @@ def render_manage_departments():
     st.write("Create and manage departments. Staff members are assigned to one primary department.")
     with st.expander("Add New Department", expanded=False):
         with st.form("add_department_form", clear_on_submit=True):
-            col1, col2 = st.columns([1, 2])
+            col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
                 new_dept_id = st.text_input("Department ID", help="e.g., ICU, ER, CARD", key="new_dept_id")
             with col2:
                 new_dept_name = st.text_input("Department Name", help="e.g., ICU, Emergency, Cardiology", key="new_dept_name")
+            with col3:
+                new_dept_colour = st.color_picker("Color", "#E8F4FD", key="new_dept_colour")
 
             if st.form_submit_button("Add Department", use_container_width=True):
                 if new_dept_id and new_dept_name:
@@ -1900,7 +1978,8 @@ def render_manage_departments():
                         new_dept = {
                             "id": new_dept_id,
                             "name": new_dept_name,
-                            "description": ""
+                            "description": "",
+                            "colour": new_dept_colour
                         }
                         st.session_state.departments.append(new_dept)
                         st.session_state.departments.sort(key=lambda x: x['name'].upper())
@@ -1994,11 +2073,13 @@ def render_manage_departments():
             if st.session_state.editing_dept_id == dept['id']:
                 with st.form(f"edit_dept_form_{dept['id']}"):
                     st.write(f"**Edit Department: {dept['name']}**")
-                    col1, col2 = st.columns([1, 2])
+                    col1, col2, col3 = st.columns([1, 2, 1])
                     with col1:
                         edit_id = st.text_input("ID", value=dept['id'])
                     with col2:
                         edit_name = st.text_input("Name", value=dept['name'])
+                    with col3:
+                        edit_colour = st.color_picker("Color", value=dept.get('colour', '#E8F4FD'))
 
                     f_col1, f_col2 = st.columns(2)
                     with f_col1:
@@ -2013,7 +2094,7 @@ def render_manage_departments():
                             else:
                                 if edit_id != old_id:
                                     # Rename the ID directly in supabase to cascade FOREIGN KEY changes
-                                    try: supabase.table("departments").update({"id": edit_id}).eq("id", old_id).execute()
+                                    try: supabase.table("departments").update({"id": edit_id, "colour": edit_colour}).eq("id", old_id).execute()
                                     except: pass
                                     # Cascade locally to nurses
                                     for n in st.session_state.nurses:
@@ -2022,9 +2103,13 @@ def render_manage_departments():
                                     # Background save nurses to sync the local cascade
                                     import threading
                                     threading.Thread(target=save_data, args=("nurses", NURSE_DATA_FILE, st.session_state.nurses)).start()
+                                else:
+                                    try: supabase.table("departments").update({"colour": edit_colour}).eq("id", old_id).execute()
+                                    except: pass
                                     
                                 dept['id'] = edit_id
                                 dept['name'] = edit_name
+                                dept['colour'] = edit_colour
                                 st.session_state.departments.sort(key=lambda x: x['name'].upper())
                                 save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
                                 
@@ -2204,16 +2289,55 @@ def render_manage_demand():
             st.info("No override set for this date. Default demand will be used.")
 
 
+def render_dashboard():
+    st.write("Ensure all core modules are configured before generating a schedule.")
+    
+    # Check status of each module
+    sys_shifts = len(st.session_state.shifts) > 0
+    sys_skills = len(st.session_state.skills) > 0
+    sys_depts = len(st.session_state.departments) > 0
+    sys_grades = sum(len(layer) for layer in st.session_state.grades) > 0
+    sys_staff = len(st.session_state.nurses) > 0
+    sys_demand = len(st.session_state.demand.get('default', {})) > 0
+    
+    # Display cards
+    c1, c2, c3 = st.columns(3)
+    def status_icon(is_ok):
+        return "✅" if is_ok else "❌"
+        
+    with c1:
+        st.info(f"{status_icon(sys_shifts)} **Shifts** defined ({len(st.session_state.shifts)})")
+        st.info(f"{status_icon(sys_skills)} **Skills** defined ({len(st.session_state.skills)})")
+    with c2:
+        st.info(f"{status_icon(sys_depts)} **Departments** defined ({len(st.session_state.departments)})")
+        st.info(f"{status_icon(sys_grades)} **Grades** defined ({sum(len(layer) for layer in st.session_state.grades)})")
+    with c3:
+        st.info(f"{status_icon(sys_staff)} **Staff Members** ({len(st.session_state.nurses)})")
+        st.info(f"{status_icon(sys_demand)} **Default Demand** Configured")
+        
+    all_ok = all([sys_shifts, sys_skills, sys_depts, sys_grades, sys_staff, sys_demand])
+    st.session_state.dashboard_ok = all_ok
+    
+    st.markdown("---")
+    if all_ok:
+        st.success("🎉 All systems go! You are ready to generate schedules.")
+        if st.button("Go to Generate Schedule 🚀", type="primary"):
+            st.session_state.current_page = 'Generate Schedule'
+            st.rerun()
+    else:
+        st.error("⚠️ Please complete the missing setups in the side menu before proceeding.")
+
 # ---------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------
 
 if 'current_page' not in st.session_state:
-    st.session_state.current_page = 'Generate Schedule'
+    st.session_state.current_page = 'Dashboard'
 
 with st.sidebar:
     st.markdown('<div style="margin-top: -30px;"></div>', unsafe_allow_html=True)
     st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>Main Page</span>", unsafe_allow_html=True)
+    st.button("📋 Dashboard", on_click=lambda: st.session_state.update(current_page='Dashboard'), use_container_width=True)
     st.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
 
     st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
@@ -2233,10 +2357,6 @@ with st.sidebar:
         st.button("📊 Minimum Demand", on_click=lambda: st.session_state.update(current_page='Minimum Demand'), use_container_width=True)
         st.button("👥 Staff", on_click=lambda: st.session_state.update(current_page='Manage Staff'), use_container_width=True)
         st.button("🏖️ Leave Types", on_click=lambda: st.session_state.update(current_page='Leave Type'), use_container_width=True)
-
-    # 🏅 Tutorial & Certificate (Dynamic)
-    tutorial_manager.render_sidebar_progress()
-
     # Sidebar Auto-Collapse Script (Injecting hidden components)
     st.components.v1.html("""
         <script>
@@ -2285,15 +2405,10 @@ with st.sidebar:
 # Main Layout: Content Tracking & Navigation
 # ---------------------------------------------------------------------
 
-# Show "Back to Tutorial Menu" if in tutorial mode and on a module page
-module_ids = [m['id'] for m in tutorial_manager.TUTORIAL_MODULES]
-if st.session_state.get('tutorial_active') and st.session_state.current_page in module_ids:
-    if st.button("⬅️ Back to Tutorial Menu", use_container_width=True):
-        st.session_state.current_tutorial_module = None
-        st.rerun()
+if st.session_state.current_page == 'Dashboard':
+    st.header("📋 Setup Dashboard")
+    render_dashboard()
 
-if st.session_state.current_page == 'Certificate':
-    tutorial_manager.render_certificate()
 elif st.session_state.current_page == 'Theme':
     st.header("🎨 Theme Settings")
     st.write("Choose a visual theme for the application.")
@@ -2373,8 +2488,28 @@ elif st.session_state.current_page == 'Soft Constraints':
     st.write("Adjust the priorities below to guide the optimization. These are goals the solver tries to achieve while respecting all Hard Constraints.")
     
     with st.container(border=True):
+        st.subheader("⚡ Quick Presets")
+        st.write("Apply pre-configured weighting strategies instantly.")
+        pc1, pc2, pc3 = st.columns(3)
+        def apply_preset(u, f, n, w):
+            st.session_state.schedule_weights = {
+                'utilization': u, 'overall_fairness': f, 
+                'night_fairness': n, 'weekend_fairness': w
+            }
+        
+        if pc1.button("⚖️ Balanced", use_container_width=True, help="Equal priority for all goals"):
+            apply_preset(5, 5, 5, 5)
+            st.rerun()
+        if pc2.button("📈 Max Utilization", use_container_width=True, help="Prioritize filling active shifts over staff fairness"):
+            apply_preset(10, 2, 2, 2)
+            st.rerun()
+        if pc3.button("😌 Staff Wellbeing", use_container_width=True, help="Prioritize spreading shifts and nights fairly"):
+            apply_preset(2, 8, 10, 10)
+            st.rerun()
+
+    with st.container(border=True):
         st.subheader("🎯 Optimization Weights")
-        st.write("Higher values give more priority to each goal. Use these to balance workload and utilization.")
+        st.write("Fine-tune priorities. Higher values give more priority to each goal.")
         st.markdown("<br>", unsafe_allow_html=True)
         
         col_w1, col_w2 = st.columns(2)
@@ -2401,8 +2536,23 @@ elif st.session_state.current_page == 'Soft Constraints':
                 key="soft_wt_weekend"
             )
         
-        if st.button("💾 Save Priority Settings", type="primary", use_container_width=True):
-            notify("Settings Saved", detail="Scheduling priorities have been updated and will be used for the next generation.")
+        st.markdown("---")
+        sc1, sc2 = st.columns(2)
+        with sc1:
+            if st.button("💾 Save Profile to Account", type="primary", use_container_width=True):
+                save_user_prefs(supabase, st.session_state.current_user, profile=st.session_state.schedule_weights)
+                notify("Profile Saved", detail="Soft constraints saved to your account.")
+                st.rerun()
+        with sc2:
+            if st.button("🔄 Reload Saved Profile", use_container_width=True):
+                usr = load_user(supabase, st.session_state.current_user)
+                if usr and usr.get('soft_constraint_profile'):
+                    st.session_state.schedule_weights = usr['soft_constraint_profile']
+                    notify("Profile Loaded", detail="Soft constraints restored.")
+                    st.rerun()
+                else:
+                    notify("No Profile Found", detail="You haven't saved a profile yet.", type="warning")
+
             # Weights are already in session_state via the keys, but we ensure they persist if needed.
             st.rerun()
 
@@ -2411,6 +2561,22 @@ elif st.session_state.current_page == 'Soft Constraints':
 
 elif st.session_state.current_page == 'Generate Schedule':
     st.header("Generate Schedule")
+    
+    # Check Dashboard Status first
+    sys_shifts = len(st.session_state.shifts) > 0
+    sys_skills = len(st.session_state.skills) > 0
+    sys_depts = len(st.session_state.departments) > 0
+    sys_grades = sum(len(layer) for layer in st.session_state.grades) > 0
+    sys_staff = len(st.session_state.nurses) > 0
+    sys_demand = len(st.session_state.demand.get('default', {})) > 0
+    all_ok = all([sys_shifts, sys_skills, sys_depts, sys_grades, sys_staff, sys_demand])
+    
+    if not all_ok:
+        st.warning("⚠️ Application setup is incomplete. Please visit the **Dashboard** to configure missing modules.")
+        if st.button("Go to Dashboard"):
+            st.session_state.current_page = 'Dashboard'
+            st.rerun()
+        st.stop()
     
     # Initialize a session state for selected department
     if 'gen_selected_dept_id' not in st.session_state:
@@ -2635,11 +2801,23 @@ elif st.session_state.current_page == 'Generate Schedule':
                 except StopIteration:
                     pass
 
+            # Inject leave days from DB before passing to model
+            import copy
+            nurses_with_leave = []
+            for n in dept_nurses:
+                n_copy = copy.deepcopy(n)
+                try:
+                    leave_indices = leave_db.get_leave_days_for_nurse(supabase, n['employee_id'], roster_start, roster_end)
+                    n_copy['leave_days'] = leave_indices
+                except:
+                    n_copy['leave_days'] = []
+                nurses_with_leave.append(n_copy)
+
             try:
                 model = NurseRosteringModel(
-                    num_nurses=len(dept_nurses),
+                    num_nurses=len(nurses_with_leave),
                     num_days=planning_horizon,
-                    nurses_list=dept_nurses,
+                    nurses_list=nurses_with_leave,
                     shift_requirements=shift_requirements,
                     shifts_config=st.session_state.shifts,
                     grade_hierarchy=st.session_state.grades,
@@ -2947,7 +3125,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                 
                 # Visualization
                 st.markdown("#### Shift Distribution")
-                st.bar_chart(stat_df.set_index('Nurse')['Total Shifts'])
+                st.bar_chart(stat_df.set_index('Nurse')[['Total Shifts', 'Night Shifts', 'Weekend Shifts']])
                 
             # Excel Export
             output = io.BytesIO()

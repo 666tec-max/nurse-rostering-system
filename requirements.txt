@@ -3,4 +3,3 @@ pandas
 ortools
 supabase
 openpyxl
-extra-streamlit-components

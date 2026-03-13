@@ -1,7 +1,7 @@
 from ortools.sat.python import cp_model
 
 class NurseRosteringModel:
-    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None, start_date=None, locked_assignments=None, weights=None):
+    def __init__(self, num_nurses, num_days, nurses_list, shift_requirements=None, shifts_config=None, grade_hierarchy=None, start_date=None, locked_assignments=None, weights=None, max_monthly_minutes=11760):
         """
         Initialize the Nurse Rostering Model.
         
@@ -23,6 +23,7 @@ class NurseRosteringModel:
         self.grade_hierarchy = grade_hierarchy
         self.start_date = start_date
         self.locked_assignments = locked_assignments or {}
+        self.max_monthly_minutes = max_monthly_minutes  # Hard cap: ~196 hrs/month
         self.weights = weights or {
             'utilization': 10,
             'overall_fairness': 5,
@@ -276,7 +277,21 @@ class NurseRosteringModel:
                     # Enforce OFF day
                     for s in self.shifts:
                         self.model.Add(self.x[(n_idx, d_idx, s)] == 0)
+                elif shift_code in self.shifts:
                     self.model.Add(self.x[(n_idx, d_idx, shift_code)] == 1)
+
+        # 8. Monthly Hours Cap (Hard Constraint)
+        # Pro-rate the 11,760 min monthly cap to the actual planning horizon
+        # (e.g., 15-day roster => cap ~= 11760 * 15/30 = 5880 min)
+        if self.max_monthly_minutes > 0:
+            pro_rated_cap = int(self.max_monthly_minutes * self.num_days / 30)
+            for n in range(self.num_nurses):
+                total_minutes = sum(
+                    self.x[(n, d, s)] * self.shift_durations.get(s, 480)
+                    for d in range(self.num_days)
+                    for s in self.shifts
+                )
+                self.model.Add(total_minutes <= pro_rated_cap)
 
     def solve_model(self):
         """Solve the model using a single weighted objective function."""
