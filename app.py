@@ -727,8 +727,8 @@ def render_manage_shifts():
                                     for d_key, shifts_dict in st.session_state.demand.get(t, {}).items():
                                         if old_code in shifts_dict:
                                             shifts_dict[edit_code] = shifts_dict.pop(old_code)
-                                import threading
-                                threading.Thread(target=save_data, args=("demand", DEMAND_DATA_FILE, st.session_state.demand)).start()
+                                # Save Demand (Immediate synchronous save for RLS consistency)
+                                save_data("demand", DEMAND_DATA_FILE, st.session_state.demand, st.session_state.current_user)
 
                             s['code'] = edit_code
                             s['name'] = edit_name
@@ -1164,9 +1164,9 @@ def edit_staff_dialog(staff_member):
                 "max_consecutive_work_days": int(new_consec)
             }
             try:
-                staff_db.update_staff(supabase, staff_member['employee_id'], updates)
+                staff_db.update_staff(supabase, staff_member['employee_id'], updates, st.session_state.current_user)
                 # Refresh session state
-                updated_staff = staff_db.fetch_all_staff(supabase)
+                updated_staff = staff_db.fetch_all_staff(supabase, st.session_state.current_user)
                 for s in updated_staff: 
                     s['id'] = s['employee_id'] # Map for compatibility
                 st.session_state.nurses = updated_staff
@@ -1189,9 +1189,9 @@ def delete_staff_dialog(staff_member):
     with col2:
         if st.button("Delete", type="primary", use_container_width=True):
             try:
-                staff_db.delete_staff(supabase, staff_member['employee_id'])
+                staff_db.delete_staff(supabase, staff_member['employee_id'], st.session_state.current_user)
                 # Refresh session state
-                updated_staff = staff_db.fetch_all_staff(supabase)
+                updated_staff = staff_db.fetch_all_staff(supabase, st.session_state.current_user)
                 for s in updated_staff: 
                     s['id'] = s['employee_id'] # Map for compatibility
                 st.session_state.nurses = updated_staff
@@ -1225,6 +1225,7 @@ def leave_requests_dialog(staff_member):
                     start_d, end_d = date_range
                     res = leave_db.insert_leave_request(
                         supabase=supabase, 
+                        owner_id=st.session_state.current_user,
                         employee_id=staff_member['employee_id'], 
                         start_date=start_d, 
                         end_date=end_d, 
@@ -1245,7 +1246,7 @@ def leave_requests_dialog(staff_member):
     st.markdown("---")
     st.write("**Existing Leave Requests**")
     
-    reqs = leave_db.fetch_leave_requests(supabase, employee_id=staff_member['employee_id'])
+    reqs = leave_db.fetch_leave_requests(supabase, owner_id=st.session_state.current_user, employee_id=staff_member['employee_id'])
     if not reqs:
         st.info("No leave requests found.")
     else:
@@ -1262,7 +1263,7 @@ def leave_requests_dialog(staff_member):
                 st.markdown(f"<span style='color:{color}; font-weight:bold;'>{r['status']}</span>", unsafe_allow_html=True)
             with rc4:
                 if st.button("🗑️", key=f"del_lr_{r['id']}", help="Delete Request"):
-                    leave_db.delete_leave_request(supabase, r['id'])
+                    leave_db.delete_leave_request(supabase, owner_id=st.session_state.current_user, leave_id=r['id'])
                     try: log_audit(supabase, st.session_state.current_user, "DEL_LEAVE_REQ", {"employee_id": staff_member['employee_id'], "leave_id": r['id']})
                     except: pass
                     notify("Request Deleted", "Leave request removed successfully.")
@@ -1372,8 +1373,8 @@ def render_manage_staffs():
                             "leave_days": []
                         }
                         try:
-                            staff_db.insert_staff(supabase, new_record)
-                            updated_staff = staff_db.fetch_all_staff(supabase)
+                            staff_db.insert_staff(supabase, new_record, st.session_state.current_user)
+                            updated_staff = staff_db.fetch_all_staff(supabase, st.session_state.current_user)
                             for s in updated_staff: s['id'] = s['employee_id']
                             st.session_state.nurses = updated_staff
                             log_audit(supabase, st.session_state.current_user, "ADD_STAFF", {"employee_id": add_id})
@@ -1553,7 +1554,7 @@ def render_manage_staffs():
                                 
                                 try:
                                     if is_update:
-                                        staff_db.update_staff(supabase, emp_id, record_data)
+                                        staff_db.update_staff(supabase, emp_id, record_data, st.session_state.current_user)
                                         import_results["updated"] += 1
                                     else:
                                         # Fill defaults for new records
@@ -1562,13 +1563,13 @@ def render_manage_staffs():
                                             "max_consecutive_work_days": 6,
                                             "leave_days": []
                                         })
-                                        staff_db.insert_staff(supabase, record_data)
+                                        staff_db.insert_staff(supabase, record_data, st.session_state.current_user)
                                         import_results["added"] += 1
                                 except Exception as e:
                                     import_results["errors"].append(f"Row {idx+2}: {str(e)}")
                             
                             # Refresh state
-                            st.session_state.nurses = staff_db.fetch_all_staff(supabase)
+                            st.session_state.nurses = staff_db.fetch_all_staff(supabase, st.session_state.current_user)
                             for s in st.session_state.nurses: s['id'] = s['employee_id']
                             
                             msg = f"Import Finished! Added {import_results['added']}, Updated {import_results['updated']} records."
@@ -1624,9 +1625,9 @@ def render_manage_staffs():
     if selected_for_deletion:
         if st.button(f"🗑️ Delete {len(selected_for_deletion)} Selected Personnel", type="primary"):
             for emp_id in selected_for_deletion:
-                try: staff_db.delete_staff(supabase, emp_id)
+                try: staff_db.delete_staff(supabase, emp_id, st.session_state.current_user)
                 except: pass
-            st.session_state.nurses = staff_db.fetch_all_staff(supabase)
+            st.session_state.nurses = staff_db.fetch_all_staff(supabase, st.session_state.current_user)
             for s in st.session_state.nurses: s['id'] = s['employee_id']
             # Clear checkboxes
             for emp_id in selected_for_deletion:
@@ -1850,8 +1851,8 @@ def render_manage_skills():
                                     for n in st.session_state.nurses:
                                         if old_code in n.get('skills', []):
                                             n['skills'] = [edit_code if sk == old_code else sk for sk in n['skills']]
-                                    import threading
-                                    threading.Thread(target=save_data, args=("nurses", NURSE_DATA_FILE, st.session_state.nurses, st.session_state.current_user)).start()
+                                    # Immediate synchronous save for RLS consistency
+                                    save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses, st.session_state.current_user)
                                 
                                 skill['code'] = edit_code
                                 skill['name'] = edit_name
@@ -2060,9 +2061,8 @@ def render_manage_departments():
                                     for n in st.session_state.nurses:
                                         if n.get("department_id") == old_id:
                                             n["department_id"] = edit_id
-                                    # Background save nurses to sync the local cascade
-                                    import threading
-                                    threading.Thread(target=save_data, args=("nurses", NURSE_DATA_FILE, st.session_state.nurses, st.session_state.current_user)).start()
+                                    # Immediate synchronous save for RLS consistency
+                                    save_data("nurses", NURSE_DATA_FILE, st.session_state.nurses, st.session_state.current_user)
                                 else:
                                     try: supabase.table("departments").update({"colour": edit_colour}).eq("id", old_id).eq("owner_user_id", st.session_state.current_user).execute()
                                     except: pass
@@ -2902,7 +2902,7 @@ elif st.session_state.current_page == 'Generate Schedule':
             for n in dept_nurses:
                 n_copy = copy.deepcopy(n)
                 try:
-                    leave_indices = leave_db.get_leave_days_for_nurse(supabase, n['employee_id'], roster_start, roster_end)
+                    leave_indices = leave_db.get_leave_days_for_nurse(supabase, n['employee_id'], roster_start, roster_end, st.session_state.current_user)
                     n_copy['leave_days'] = leave_indices
                 except:
                     n_copy['leave_days'] = []

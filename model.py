@@ -84,34 +84,29 @@ class NurseRosteringModel:
                 self.model.AddBoolAnd([is_night[d], is_night[d+1].Not()]).OnlyEnforceIf(is_end_of_block)
                 self.model.AddBoolOr([is_night[d].Not(), is_night[d+1]]).OnlyEnforceIf(is_end_of_block.Not())
                 
-                # Rule 0: No work ANY shift immediately after any night shift block ends (1 Day Off minimum)
-                # This covers "1 Night -> 1 Day Off" or any block end
+                # Rule 0: Min 1 Day Off after ANY night shift block (d+1 must be off)
                 if d + 1 < self.num_days:
                     for s in self.shifts:
                         self.model.Add(self.x[(n, d+1, s)] == 0).OnlyEnforceIf(is_end_of_block)
 
-                # Rule 1: 2-3 nights -> 2 days off (d+1 and d+2 must be off)
+                # Rule 1: 2-3 nights -> Min 2 days off (d+1 AND d+2 must be off)
                 if d + 2 < self.num_days:
-                    trigger_2off = self.model.NewBoolVar(f'trigger_2off_n{n}_d{d}')
-                    # Trigger if end of block AND worked 2 or 3 nights
-                    self.model.AddBoolAnd([is_end_of_block]).OnlyEnforceIf(trigger_2off) # Simplified: trigger_2off is basically end_block with count check
-                    
-                    # More precise trigger: (consec_nights[d] == 2 OR 3) AND end_block
-                    # Actually easier to use OnlyEnforceIf with multiple literals
-                    count_2_or_3 = self.model.NewBoolVar(f'c23_n{n}_d{d}')
-                    self.model.AddLinearExpressionInDomain(consec_nights[d], cp_model.Domain.FromValues([2, 3])).OnlyEnforceIf(count_2_or_3)
-                    self.model.AddLinearExpressionInDomain(consec_nights[d], cp_model.Domain.FromValues([0, 1, 4])).OnlyEnforceIf(count_2_or_3.Not())
+                    count_23 = self.model.NewBoolVar(f'c23_n{n}_d{d}')
+                    self.model.AddLinearExpressionInDomain(consec_nights[d], cp_model.Domain.FromValues([2, 3])).OnlyEnforceIf(count_23)
+                    self.model.AddLinearExpressionInDomain(consec_nights[d], cp_model.Domain.FromValues([0, 1, 4])).OnlyEnforceIf(count_23.Not())
                     
                     for s in self.shifts:
-                        self.model.Add(self.x[(n, d+2, s)] == 0).OnlyEnforceIf([is_end_of_block, count_2_or_3])
+                        # d+1 is already off by Rule 0, so we just add d+2
+                        self.model.Add(self.x[(n, d+2, s)] == 0).OnlyEnforceIf([is_end_of_block, count_23])
 
-                # Rule 2: 4 nights -> 3 days off (d+1, d+2, d+3 must be off)
+                # Rule 2: 4 nights -> Min 3 days off (d+1, d+2, AND d+3 must be off)
                 if d + 3 < self.num_days:
                     count_4 = self.model.NewBoolVar(f'c4_n{n}_d{d}')
                     self.model.Add(consec_nights[d] == 4).OnlyEnforceIf(count_4)
                     self.model.Add(consec_nights[d] != 4).OnlyEnforceIf(count_4.Not())
                     
                     for s in self.shifts:
+                        # d+1 is already off by Rule 0
                         self.model.Add(self.x[(n, d+2, s)] == 0).OnlyEnforceIf([is_end_of_block, count_4])
                         self.model.Add(self.x[(n, d+3, s)] == 0).OnlyEnforceIf([is_end_of_block, count_4])
 
