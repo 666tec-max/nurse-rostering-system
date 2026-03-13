@@ -1,5 +1,5 @@
 """
-leave_db.py — CRUD helpers for the leave_requests table.
+leave_db.py — CRUD helpers for the staff_requests (repurposed from leave_requests) table.
 """
 from datetime import date, timedelta
 
@@ -54,13 +54,13 @@ def delete_leave_request(supabase, owner_id, leave_id):
 def get_leave_days_for_nurse(supabase, owner_id, employee_id, roster_start, roster_end):
     """
     Returns a list of day-indices (0-based from roster_start) that fall within
-    approved leave for the given nurse and date range, scoped to the owner.
+    approved leave (request_type='OFF') for the given nurse.
     """
     rows = fetch_leave_requests(supabase, owner_id=owner_id, employee_id=employee_id,
                                  start_date=roster_start, end_date=roster_end)
     leave_indices = set()
     for row in rows:
-        if row.get("status") != "Approved":
+        if row.get("status") != "Approved" or row.get("leave_type") != "OFF":
             continue
         rs = date.fromisoformat(row["start_date"])
         re = date.fromisoformat(row["end_date"])
@@ -70,3 +70,25 @@ def get_leave_days_for_nurse(supabase, owner_id, employee_id, roster_start, rost
             leave_indices.add(idx)
             d += timedelta(days=1)
     return sorted(leave_indices)
+
+
+def get_must_have_shifts_for_nurse(supabase, owner_id, employee_id, roster_start, roster_end):
+    """
+    Returns a list of dicts {'day': idx, 'shift': code} for specific shift requests.
+    """
+    rows = fetch_leave_requests(supabase, owner_id=owner_id, employee_id=employee_id,
+                                 start_date=roster_start, end_date=roster_end)
+    must_have = []
+    for row in rows:
+        if row.get("status") != "Approved" or row.get("leave_type") == "OFF":
+            continue
+        
+        shift_code = row.get("leave_type")
+        rs = date.fromisoformat(row["start_date"])
+        re = date.fromisoformat(row["end_date"])
+        d = max(rs, roster_start)
+        while d <= min(re, roster_end):
+            idx = (d - roster_start).days
+            must_have.append({'day': idx, 'shift': shift_code})
+            d += timedelta(days=1)
+    return must_have

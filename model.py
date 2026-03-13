@@ -243,7 +243,11 @@ class NurseRosteringModel:
                             if key not in ["Total", "Grade", "Color"]: # Skip metadata
                                 # This is a skill requirement
                                 skill_code = key
-                                min_count = val
+                                try:
+                                    min_count = int(val)
+                                except (TypeError, ValueError):
+                                    continue
+                                    
                                 skilled_nurses = [n for n in range(self.num_nurses) if skill_code in self.nurses[n].get('skills', [])]
                                 self.model.Add(sum(self.x[(n, d, s)] for n in skilled_nurses) >= min_count)
                     else:

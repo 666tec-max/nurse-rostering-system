@@ -42,106 +42,194 @@ LEAVES_DATA_FILE = ""
 DEMAND_DATA_FILE = ""
 
 # ---------------------------------------------------------------------
-# Dashboard Design System (CSS)
+# Dashboard Design System & Dynamic Theming
 # ---------------------------------------------------------------------
-PRIMARY_COLOR = "#2563EB"  # Hospital Blue
-BG_COLOR = "#F8FAFC"      # Light Neutral
-CARD_BG = "#FFFFFF"
-TEXT_COLOR = "#1E293B"
-BORDER_COLOR = "#E2E8F0"
 
+# Initialize theme if not present
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'Light'
+
+# Dynamic Color Palettes
+THEMES = {
+    'Light': {
+        'primary': '#2563EB',      # Vivid Hospital Blue
+        'bg': '#F8FAFC',           # Soft Neutral
+        'card_bg': '#FFFFFF',      # Pure White
+        'text': '#1E293B',         # Slate Dark
+        'subtext': '#64748B',      # Slate Medium
+        'border': '#E2E8F0',       # Slate light
+        'sidebar_bg': '#FFFFFF',
+        'sidebar_text': '#475569',
+        'accent': '#EFF6FF'        # Very Light Blue
+    },
+    'Dark': {
+        'primary': '#3B82F6',      # Brighter Blue for Dark mode
+        'bg': '#0F172A',           # Deep Slate/Navy
+        'card_bg': '#1E293B',      # Slate Dark
+        'text': '#F1F5F9',         # Light Gray
+        'subtext': '#94A3B8',      # Muted Slate
+        'border': '#334155',       # Dark Slate
+        'sidebar_bg': '#1E293B',
+        'sidebar_text': '#CBD5E1',
+        'accent': '#1E293B'
+    },
+    'Eye Comfort': {
+        'primary': '#92400E',      # Amber/Bronze
+        'bg': '#FDFCF0',           # Warm Cream
+        'card_bg': '#FFFBF0',      # Warmer Off-white
+        'text': '#451A03',         # Deep Brown
+        'subtext': '#92400E',      # Muted Amber
+        'border': '#FEF3C7',       # Light Amber
+        'sidebar_bg': '#FFFBF0',
+        'sidebar_text': '#78350F',
+        'accent': '#FEF3C7'
+    }
+}
+
+t = THEMES.get(st.session_state.theme, THEMES['Light'])
+
+# Updated Global CSS with Theme Support
 NEW_CSS = f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
     /* Global styles */
     .stApp {{
-        background-color: {BG_COLOR};
-        color: {TEXT_COLOR};
-        font-family: 'Inter', sans-serif;
+        background-color: {t['bg']};
+        color: {t['text']};
+        font-family: 'Inter', -apple-system, sans-serif;
     }}
 
     /* Sidebar Styling */
     [data-testid="stSidebar"] {{
-        background-color: #FFFFFF;
-        border-right: 1px solid {BORDER_COLOR};
+        background-color: {t['sidebar_bg']};
+        border-right: 1px solid {t['border']};
+    }}
+    
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{
+        color: {t['sidebar_text']};
     }}
     
     [data-testid="stSidebar"] .stButton button {{
         border: none;
         background: transparent;
+        color: {t['sidebar_text']};
         text-align: left;
         justify-content: flex-start;
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
+        padding: 0.65rem 1rem;
+        border-radius: 0.75rem;
         font-weight: 500;
-        transition: all 0.2s;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        margin: 0.1rem 0;
     }}
     
     [data-testid="stSidebar"] .stButton button:hover {{
-        background-color: #F1F5F9;
-        color: {PRIMARY_COLOR};
+        background-color: {t['accent']};
+        color: {t['primary']};
+        transform: translateX(4px);
     }}
     
+    [data-testid="stSidebar"] .stButton button[kind="primary"] {{
+        background-color: {t['primary']} !important;
+        color: white !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }}
+
     /* Header bar */
     .app-header {{
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1rem 2rem;
-        background-color: #FFFFFF;
-        border-bottom: 1px solid {BORDER_COLOR};
-        margin: -4rem -2rem 2rem -2rem;
-        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        padding: 1.25rem 2rem;
+        background-color: {t['card_bg']};
+        border-bottom: 1px solid {t['border']};
+        margin: -4rem -2rem 2.5rem -2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        backdrop-filter: blur(8px);
+        position: sticky;
+        top: 0;
+        z-index: 100;
     }}
     
     .header-title {{
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: {PRIMARY_COLOR};
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: {t['primary']};
+        letter-spacing: -0.025em;
     }}
     
     .user-info {{
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.75rem;
         font-size: 0.875rem;
-        color: #64748B;
+        color: {t['subtext']};
     }}
     
-    /* Dashboard Cards */
-    .dashboard-card {{
-        background-color: {CARD_BG};
-        padding: 1.5rem;
-        border-radius: 1rem;
-        border: 1px solid {BORDER_COLOR};
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        margin-bottom: 1rem;
+    /* Dashboard & Management Cards */
+    .card, .dashboard-card {{
+        background-color: {t['card_bg']};
+        padding: 1.75rem;
+        border-radius: 1.25rem;
+        border: 1px solid {t['border']};
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+        margin-bottom: 1.5rem;
+        transition: transform 0.2s;
+    }}
+    
+    .card:hover {{
+        transform: translateY(-2px);
     }}
     
     .card-header {{
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 1rem;
+        margin-bottom: 1.25rem;
+        border-bottom: 1px solid {t['border']};
+        padding-bottom: 0.75rem;
     }}
     
     .card-title {{
-        font-size: 1rem;
-        font-weight: 600;
-        color: #0F172A;
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: {t['text']};
     }}
     
-    /* Tables in Cards */
-    .stDataFrame, .stTable {{
-        border-radius: 0.5rem;
-        overflow: hidden;
+    /* Input adjustments */
+    .stTextInput input, .stSelectbox select, .stNumberInput input {{
+        background-color: {t['card_bg']} !important;
+        color: {t['text']} !important;
+        border: 1px solid {t['border']} !important;
+        border-radius: 0.75rem !important;
+    }}
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 8px;
+        background-color: transparent;
     }}
     
-    /* Hide default Streamlit decoration */
+    .stTabs [data-baseweb="tab"] {{
+        height: 40px;
+        white-space: pre;
+        background-color: {t['card_bg']};
+        border-radius: 8px 8px 0 0;
+        border: 1px solid {t['border']};
+        border-bottom: none;
+        color: {t['subtext']};
+    }}
+
+    .stTabs [aria-selected="true"] {{
+        background-color: {t['primary']} !important;
+        color: white !important;
+    }}
+
+    /* Hide Streamlit elements */
+    #MainMenu, footer, header {{visibility: hidden;}}
     div[data-testid="stDecoration"] {{
         background-image: none;
-        background-color: {PRIMARY_COLOR};
+        background-color: {t['primary']};
     }}
 </style>
 """
@@ -227,8 +315,14 @@ def load_data(table_name, file_path, default_data, owner_id):
                     count = d['count']
                     
                     if date_key not in demand[type_str]: demand[type_str][date_key] = {}
-                    if shift not in demand[type_str][date_key]: demand[type_str][date_key][shift] = {}
-                    demand[type_str][date_key][shift][skill] = count
+                    
+                    if type_str == "default":
+                        # For default demand, date_key IS the shift code, so we skip one level
+                        demand[type_str][date_key][skill] = count
+                    else:
+                        # For overrides, date_key is the date string
+                        if shift not in demand[type_str][date_key]: demand[type_str][date_key][shift] = {}
+                        demand[type_str][date_key][shift][skill] = count
                 return demand
                 
             return response.data
@@ -1200,27 +1294,32 @@ def delete_staff_dialog(staff_member):
             except Exception as e:
                 st.error(f"Error deleting staff: {e}")
 
-@st.dialog("Manage Leave Requests", width="large")
-def leave_requests_dialog(staff_member):
+@st.dialog("Manage Staff Requests", width="large")
+def manage_requests_dialog(staff_member):
     st.write(f"**Employee:** {staff_member['name']} ({staff_member['employee_id']})")
     
-    # 1. Add New Leave Request Form
-    with st.expander("➕ New Leave Request", expanded=False):
-        with st.form("new_leave_req_form", clear_on_submit=True):
+    # 1. Add New Request Form
+    with st.expander("➕ New Compulsory Request", expanded=True):
+        with st.form("new_request_form", clear_on_submit=True):
             lc1, lc2 = st.columns(2)
             with lc1:
-                date_range = st.date_input("Date Range", value=[], key="new_leave_dates")
+                date_range = st.date_input("Date Range", value=[], key="new_req_dates")
             with lc2:
-                leave_opts = {l['code']: l['name'] for l in st.session_state.leaves}
-                leave_type = st.selectbox("Leave Type", list(leave_opts.keys()), format_func=lambda x: leave_opts.get(x, x), key="new_leave_type")
+                # Options: OFF (Leave) or Shift Codes
+                options = {"OFF": "🛌 Off / Leave"}
+                for s in st.session_state.shifts:
+                    options[s['code']] = f"📌 Must Work: {s['name']} ({s['code']})"
+                
+                req_type = st.selectbox("Request Type", list(options.keys()), format_func=lambda x: options.get(x, x), key="new_req_type")
             
             hc1, hc2 = st.columns(2)
             with hc1:
-                status = st.selectbox("Status", ["Approved", "Pending", "Rejected"], key="new_leave_status")
+                status = "Approved" # Always approved for now as per user simplified request
+                st.info("💡 All staff requests are automatically approved and treated as compulsory.")
             with hc2:
-                remarks = st.text_input("Remarks (Optional)", key="new_leave_remarks")
+                remarks = st.text_input("Remarks (Optional)", key="new_req_remarks")
                 
-            if st.form_submit_button("Submit Request", use_container_width=True):
+            if st.form_submit_button("Add Compulsory Request", use_container_width=True):
                 if isinstance(date_range, tuple) and len(date_range) == 2:
                     start_d, end_d = date_range
                     res = leave_db.insert_leave_request(
@@ -1229,44 +1328,63 @@ def leave_requests_dialog(staff_member):
                         employee_id=staff_member['employee_id'], 
                         start_date=start_d, 
                         end_date=end_d, 
-                        leave_type=leave_type, 
+                        leave_type=req_type, 
                         status=status, 
                         remarks=remarks
                     )
                     if res is True:
-                        try: log_audit(supabase, st.session_state.current_user, "ADD_LEAVE_REQ", {"employee_id": staff_member['employee_id'], "dates": f"{start_d} to {end_d}"})
-                        except: pass
-                        notify("Leave Requested", f"Added leave for {start_d} to {end_d}")
+                        notify("Request Added", f"Compulsory {req_type} request added for {start_d} to {end_d}")
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {res}")
+                elif isinstance(date_range, date):
+                    # Single day
+                    res = leave_db.insert_leave_request(
+                        supabase=supabase, 
+                        owner_id=st.session_state.current_user,
+                        employee_id=staff_member['employee_id'], 
+                        start_date=date_range, 
+                        end_date=date_range, 
+                        leave_type=req_type, 
+                        status=status, 
+                        remarks=remarks
+                    )
+                    if res is True:
+                        notify("Request Added", f"Compulsory {req_type} request added for {date_range}")
                         st.rerun()
                     else:
                         st.error(f"Error: {res}")
                 else:
-                    st.error("Please select a valid start and end date.")
+                    st.error("Please select a valid date or date range.")
                     
     st.markdown("---")
-    st.write("**Existing Leave Requests**")
+    st.write("**Active Compulsory Requests**")
     
     reqs = leave_db.fetch_leave_requests(supabase, owner_id=st.session_state.current_user, employee_id=staff_member['employee_id'])
     if not reqs:
-        st.info("No leave requests found.")
+        st.info("No active requests found.")
     else:
         for r in reqs:
             rc1, rc2, rc3, rc4 = st.columns([2, 1, 1, 0.5])
             with rc1:
-                st.write(f"**{r['start_date']}** to **{r['end_date']}**")
+                if r['start_date'] == r['end_date']:
+                    st.write(f"🗓️ **{r['start_date']}**")
+                else:
+                    st.write(f"📅 **{r['start_date']}** to **{r['end_date']}**")
                 if r.get("remarks"):
                     st.caption(f"📝 {r['remarks']}")
             with rc2:
-                st.write(f"*{r.get('leave_type', 'AL')}*")
+                rtype = r.get('leave_type', 'OFF')
+                if rtype == 'OFF':
+                    st.markdown("🛌 **Off / Leave**")
+                else:
+                    st.markdown(f"📌 **Must Work: {rtype}**")
             with rc3:
-                color = "green" if r['status'] == 'Approved' else "orange" if r['status'] == 'Pending' else "red"
-                st.markdown(f"<span style='color:{color}; font-weight:bold;'>{r['status']}</span>", unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{t['primary']}; font-weight:bold;'>Compulsory</span>", unsafe_allow_html=True)
             with rc4:
                 if st.button("🗑️", key=f"del_lr_{r['id']}", help="Delete Request"):
                     leave_db.delete_leave_request(supabase, owner_id=st.session_state.current_user, leave_id=r['id'])
-                    try: log_audit(supabase, st.session_state.current_user, "DEL_LEAVE_REQ", {"employee_id": staff_member['employee_id'], "leave_id": r['id']})
-                    except: pass
-                    notify("Request Deleted", "Leave request removed successfully.")
+                    notify("Request Deleted", "Request removed successfully.")
                     st.rerun()
 
 def render_manage_staffs():
@@ -1682,8 +1800,8 @@ def render_manage_staffs():
                             if st.button("✏️", key=f"edit_{s['employee_id']}_{idx}", help="Edit"):
                                 edit_staff_dialog(s)
                         with btn_col2:
-                            if st.button("🏖️", key=f"leave_{s['employee_id']}_{idx}", help="Manage Leave"):
-                                leave_requests_dialog(s)
+                            if st.button("📌", key=f"req_{s['employee_id']}_{idx}", help="Manage Requests"):
+                                manage_requests_dialog(s)
                         with btn_col3:
                             if st.button("🗑️", key=f"del_{s['employee_id']}_{idx}", help="Delete"):
                                 delete_staff_dialog(s)
@@ -2146,7 +2264,12 @@ def render_manage_demand():
                     )
                     
                     # Update state based on edited DF
+                    # We MUST preserve the 'Grade' key if it exists
+                    current_grade = st.session_state.demand["default"][shift_code].get("Grade")
                     new_skill_dict = {"Total": new_total}
+                    if current_grade:
+                        new_skill_dict["Grade"] = current_grade
+                        
                     for _, row in edited_skills.iterrows():
                         if pd.notna(row.get('Skill')) and pd.notna(row.get('Min Count')):
                             try:
@@ -2260,23 +2383,23 @@ def render_dashboard():
     st.markdown(f"""
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
             <div class="card" style="padding: 1.5rem; text-align: center;">
-                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Total Staff</div>
-                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_staff}</div>
+                <div style="font-size: 0.875rem; color: {t['subtext']}; margin-bottom: 0.5rem;">Total Staff</div>
+                <div style="font-size: 2rem; font-weight: 700; color: {t['text']};">{total_staff}</div>
                 <div style="font-size: 0.75rem; color: #10B981; margin-top: 0.5rem;">↑ Active Personnel</div>
             </div>
             <div class="card" style="padding: 1.5rem; text-align: center;">
-                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Shifts Configured</div>
-                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_shifts}</div>
+                <div style="font-size: 0.875rem; color: {t['subtext']}; margin-bottom: 0.5rem;">Shifts Configured</div>
+                <div style="font-size: 2rem; font-weight: 700; color: {t['text']};">{total_shifts}</div>
                 <div style="font-size: 0.75rem; color: #3B82F6; margin-top: 0.5rem;">Standard Rotations</div>
             </div>
             <div class="card" style="padding: 1.5rem; text-align: center;">
-                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Departments</div>
-                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_depts}</div>
+                <div style="font-size: 0.875rem; color: {t['subtext']}; margin-bottom: 0.5rem;">Departments</div>
+                <div style="font-size: 2rem; font-weight: 700; color: {t['text']};">{total_depts}</div>
                 <div style="font-size: 0.75rem; color: #8B5CF6; margin-top: 0.5rem;">Healthcare Units</div>
             </div>
             <div class="card" style="padding: 1.5rem; text-align: center;">
-                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Skills Tracked</div>
-                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_skills}</div>
+                <div style="font-size: 0.875rem; color: {t['subtext']}; margin-bottom: 0.5rem;">Skills Tracked</div>
+                <div style="font-size: 2rem; font-weight: 700; color: {t['text']};">{total_skills}</div>
                 <div style="font-size: 0.75rem; color: #F59E0B; margin-top: 0.5rem;">Specializations</div>
             </div>
         </div>
@@ -2301,67 +2424,67 @@ def render_dashboard():
     # Checklist Card
     st.markdown(f"""
         <div class="card" style="padding: 0;">
-            <div style="padding: 1.5rem; border-bottom: 1px solid {BORDER_COLOR}; display: flex; justify-content: space-between; align-items: center;">
-                <div style="font-weight: 600; color: #1E293B;">Configuration Status</div>
-                <div style="font-size: 0.875rem; color: #64748B;">Overview of system readiness</div>
+            <div style="padding: 1.5rem; border-bottom: 1px solid {t['border']}; display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-weight: 600; color: {t['text']};">Configuration Status</div>
+                <div style="font-size: 0.875rem; color: {t['subtext']};">Overview of system readiness</div>
             </div>
             <div style="padding: 0.5rem 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {t['border']}55;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #EFF6FF; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🗓️</div>
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: {t['accent']}; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🗓️</div>
                         <div>
-                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Shift Types</div>
-                            <div style="font-size: 0.8rem; color: #64748B;">Define morning, afternoon, and night shift durations</div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: {t['text']};">Shift Types</div>
+                            <div style="font-size: 0.8rem; color: {t['subtext']};">Define morning, afternoon, and night shift durations</div>
                         </div>
                     </div>
                     {get_status_tag(sys_shifts)}
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {t['border']}55;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #F5F3FF; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🔧</div>
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: {t['accent']}; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🔧</div>
                         <div>
-                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Skills & Specialties</div>
-                            <div style="font-size: 0.8rem; color: #64748B;">List nursing skills required for different tasks</div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: {t['text']};">Skills & Specialties</div>
+                            <div style="font-size: 0.8rem; color: {t['subtext']};">List nursing skills required for different tasks</div>
                         </div>
                     </div>
                     {get_status_tag(sys_skills)}
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {t['border']}55;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #ECFDF5; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🏢</div>
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: {t['accent']}; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🏢</div>
                         <div>
-                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Healthcare Units</div>
-                            <div style="font-size: 0.8rem; color: #64748B;">Configure wards and departments</div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: {t['text']};">Healthcare Units</div>
+                            <div style="font-size: 0.8rem; color: {t['subtext']};">Configure wards and departments</div>
                         </div>
                     </div>
                     {get_status_tag(sys_depts)}
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {t['border']}55;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #FFFBEB; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🏆</div>
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: {t['accent']}; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🏆</div>
                         <div>
-                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Grade Hierarchy</div>
-                            <div style="font-size: 0.8rem; color: #64748B;">Define seniority levels and promotion paths</div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: {t['text']};">Grade Hierarchy</div>
+                            <div style="font-size: 0.8rem; color: {t['subtext']};">Define seniority levels and promotion paths</div>
                         </div>
                     </div>
                     {get_status_tag(sys_grades)}
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {t['border']}55;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #EEF2FF; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">👥</div>
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: {t['accent']}; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">👥</div>
                         <div>
-                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Medical Staff</div>
-                            <div style="font-size: 0.8rem; color: #64748B;">Onboard nurses and assign their primary departments</div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: {t['text']};">Medical Staff</div>
+                            <div style="font-size: 0.8rem; color: {t['subtext']};">Onboard nurses and assign their primary departments</div>
                         </div>
                     </div>
                     {get_status_tag(sys_staff)}
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #FDF2F8; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">📊</div>
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: {t['accent']}; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">📊</div>
                         <div>
-                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Minimum Demand</div>
-                            <div style="font-size: 0.8rem; color: #64748B;">Set shift-wise staffing requirements</div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: {t['text']};">Minimum Demand</div>
+                            <div style="font-size: 0.8rem; color: {t['subtext']};">Set shift-wise staffing requirements</div>
                         </div>
                     </div>
                     {get_status_tag(sys_demand)}
@@ -2390,33 +2513,33 @@ if 'current_page' not in st.session_state:
 # Sidebar Navigation logic
 with st.sidebar:
     st.markdown(f"""
-        <div style='text-align: center; padding: 1.5rem 0;'>
-            <div style='font-size: 2.5rem; margin-bottom: 0.5rem;'>🏥</div>
-            <div style='font-weight: 700; color: {PRIMARY_COLOR}; font-size: 1.1rem;'>Nurse Rostering</div>
-            <div style='font-size: 0.75rem; color: #64748B;'>Hospital Management</div>
+        <div style='text-align: center; padding: 2rem 0;'>
+            <div style='font-size: 3rem; margin-bottom: 0.75rem; animation: pulse 2s infinite;'>🏥</div>
+            <div style='font-weight: 800; color: {t['primary']}; font-size: 1.25rem; letter-spacing: -0.025em; line-height: 1;'>Nurse Rostering</div>
+            <div style='font-size: 0.75rem; color: {t['subtext']}; margin-top: 0.25rem;'>Smart Staff Optimization</div>
         </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("<div style='margin-top: 1rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>Main</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-top: 1rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: {t['subtext']}; text-transform: uppercase; letter-spacing: 0.1em;'>Main Overview</div>", unsafe_allow_html=True)
     
     if st.button("📊 Dashboard", use_container_width=True, type="secondary" if st.session_state.current_page != 'Dashboard' else "primary"):
         st.session_state.current_page = 'Dashboard'
         st.rerun()
         
-    if st.button("🚀 Generate Roster", use_container_width=True, type="secondary" if st.session_state.current_page != 'Generate Schedule' else "primary"):
+    if st.button("🚀 Run Optimizer", use_container_width=True, type="secondary" if st.session_state.current_page != 'Generate Schedule' else "primary"):
         st.session_state.current_page = 'Generate Schedule'
         st.rerun()
 
-    st.markdown("<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>Management</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: {t['subtext']}; text-transform: uppercase; letter-spacing: 0.1em;'>Configuration</div>", unsafe_allow_html=True)
     
     # Simple list instead of expanders for a cleaner look
     nav_items = [
         ("🏢 Departments", "Manage Departments"),
-        ("👥 Staff Members", "Manage Staff"),
-        ("🔧 Skills List", "Manage Skills"),
-        ("🏆 Grade Levels", "Grades Hierarchy"),
-        ("🗓️ Shift Types", "Manage Shifts"),
-        ("📊 Demand Setup", "Minimum Demand"),
+        ("👥 Staff Directory", "Manage Staff"),
+        ("🔧 Skills & Expertise", "Manage Skills"),
+        ("🏆 Grade Structure", "Grades Hierarchy"),
+        ("🗓️ Shift Definitions", "Manage Shifts"),
+        ("📊 Demand Patterns", "Minimum Demand"),
     ]
     
     for label, page in nav_items:
@@ -2424,27 +2547,23 @@ with st.sidebar:
             st.session_state.current_page = page
             st.rerun()
 
-    st.markdown("<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>Settings</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: {t['subtext']}; text-transform: uppercase; letter-spacing: 0.1em;'>Preferences</div>", unsafe_allow_html=True)
     
     if st.button("⚖️ Soft Constraints", use_container_width=True, type="secondary" if st.session_state.current_page != 'Soft Constraints' else "primary"):
         st.session_state.current_page = 'Soft Constraints'
         st.rerun()
         
-    if st.button("🛡️ Hard Constraints", use_container_width=True, type="secondary" if st.session_state.current_page != 'Hard Constraints' else "primary"):
+    if st.button("🛡️ Hard Rules", use_container_width=True, type="secondary" if st.session_state.current_page != 'Hard Constraints' else "primary"):
         st.session_state.current_page = 'Hard Constraints'
         st.rerun()
 
-    if st.button("🏖️ Leave Types", use_container_width=True, type="secondary" if st.session_state.current_page != 'Leave Type' else "primary"):
-        st.session_state.current_page = 'Leave Type'
+    if st.button("🎨 Theme Settings", use_container_width=True, type="secondary" if st.session_state.current_page != 'Theme' else "primary"):
+        st.session_state.current_page = 'Theme'
         st.rerun()
 
-    if st.button("📜 Audit Log", use_container_width=True, type="secondary" if st.session_state.current_page != 'Audit Log' else "primary"):
-        st.session_state.current_page = 'Audit Log'
-        st.rerun()
+    st.markdown(f"<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: {t['subtext']}; text-transform: uppercase; letter-spacing: 0.1em;'>Administration</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>System</div>", unsafe_allow_html=True)
-
-    if st.button("Logout", use_container_width=True):
+    if st.button("🚪 Logout", use_container_width=True):
         st.session_state.logged_in = False
         st.rerun()
 
@@ -2453,8 +2572,8 @@ st.markdown(f"""
     <div class="app-header">
         <div class="header-title">{st.session_state.current_page}</div>
         <div class="user-info">
-            <span>Logged in as: <strong>{st.session_state.get('current_user', 'Admin')}</strong></span>
-            <div style="width: 32px; height: 32px; border-radius: 50%; background-color: {PRIMARY_COLOR}22; display: flex; align-items: center; justify-content: center; color: {PRIMARY_COLOR}; font-weight: 700;">
+            <span>Logged in as: <strong style="color: {t['text']}">{st.session_state.get('current_user', 'Admin')}</strong></span>
+            <div style="width: 36px; height: 36px; border-radius: 10px; background-color: {t['primary']}22; display: flex; align-items: center; justify-content: center; color: {t['primary']}; font-weight: 800; border: 1px solid {t['primary']}44;">
                 {st.session_state.get('current_user', 'A')[0].upper()}
             </div>
         </div>
@@ -2472,30 +2591,38 @@ if st.session_state.current_page == 'Dashboard':
     render_dashboard()
 
 elif st.session_state.current_page == 'Theme':
-    st.header("🎨 Theme Settings")
     st.write("Choose a visual theme for the application.")
+    
+    with st.container(border=True):
+        theme_options = ['Light', 'Dark', 'Eye Comfort']
+        theme_icons = {'Light': '☀️', 'Dark': '🌙', 'Eye Comfort': '🍂'}
+        theme_descriptions = {
+            'Light': 'Default bright theme — clean, clear, and professional.',
+            'Dark': 'Deep Navy & Slate — reduces eye strain in low-light environments.',
+            'Eye Comfort': 'Warm Sepia tones — reduces blue light for extended planning sessions.'
+        }
 
-    theme_options = ['Light', 'Dark', 'Eye Comfort']
-    theme_descriptions = {
-        'Light': '☀️ Default bright theme — clean and clear.',
-        'Dark': '🌙 Dark background — easy on the eyes in low light.',
-        'Eye Comfort': '🍂 Warm sepia tones — reduces blue light for extended use.'
-    }
+        for theme_name in theme_options:
+            is_active = st.session_state.theme == theme_name
+            btn_type = 'primary' if is_active else 'secondary'
+            label = f"{theme_icons[theme_name]} {theme_name}"
+            
+            col1, col2 = st.columns([1, 2.5])
+            with col1:
+                if st.button(label, key=f"theme_{theme_name}", type=btn_type, use_container_width=True):
+                    st.session_state.theme = theme_name
+                    notify("Theme changed", detail=f"Applied {theme_name} theme. System colors updated.")
+                    st.rerun()
+            with col2:
+                st.markdown(f"""
+                    <div style="padding: 0.5rem 0;">
+                        <span style="font-weight: 600; color: {t['text']}">{theme_name} Mode</span><br>
+                        <span style="font-size: 0.85rem; color: {t['subtext']}">{theme_descriptions[theme_name]}</span>
+                    </div>
+                """, unsafe_allow_html=True)
 
-    for theme_name in theme_options:
-        is_active = st.session_state.theme == theme_name
-        btn_type = 'primary' if is_active else 'secondary'
-        label = f"{'✅ ' if is_active else ''}{theme_name}"
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            if st.button(label, key=f"theme_{theme_name}", type=btn_type, use_container_width=True):
-                st.session_state.theme = theme_name
-                notify("Theme changed successfully:", detail=f"Applied {theme_name} theme to the application")
-                st.rerun()
-        with col2:
-            st.write(theme_descriptions[theme_name])
-
-    st.caption(f"Current theme: **{st.session_state.theme}**")
+    st.markdown("---")
+    st.markdown(f"Current Active Theme: **{st.session_state.theme}**")
 
 
 elif st.session_state.current_page == 'Manage Shifts':
@@ -2509,10 +2636,6 @@ elif st.session_state.current_page == 'Manage Skills':
 elif st.session_state.current_page == 'Grades Hierarchy':
     st.header("🏆 Grades")
     render_manage_grades()
-
-elif st.session_state.current_page == 'Leave Type':
-    st.header("🏖️ Leave Types")
-    render_manage_leave_types()
 
 elif st.session_state.current_page == 'Manage Staff':
     st.header("👥 Staff")
@@ -2673,8 +2796,8 @@ elif st.session_state.current_page == 'Generate Schedule':
         
         with cols[col_idx]:
             card_class = "card"
-            border_style = f"2px solid {PRIMARY_COLOR}" if is_selected else f"1px solid {BORDER_COLOR}"
-            bg_color = f"{PRIMARY_COLOR}08" if is_selected else "white"
+            border_style = f"2px solid {t['primary']}" if is_selected else f"1px solid {t['border']}"
+            bg_color = f"{t['primary']}08" if is_selected else t['card_bg']
             
             st.markdown(f"""
                 <div class="{card_class}" style="padding: 1.25rem; border: {border_style}; background-color: {bg_color}; margin-bottom: 1rem;">
@@ -2684,7 +2807,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                     </div>
                     <div style="font-size: 0.875rem; color: #64748B;">
                         <span style="display: block; margin-bottom: 0.25rem;">👥 {d_nurses_count} Personnel Assigned</span>
-                        <span style="font-size: 0.75rem; color: {PRIMARY_COLOR if is_selected else '#94A3B8'};">
+                        <span style="font-size: 0.75rem; color: {t['primary'] if is_selected else t['subtext']};">
                             {('Active Selection' if is_selected else 'Click to select')}
                         </span>
                     </div>
@@ -2735,7 +2858,7 @@ elif st.session_state.current_page == 'Generate Schedule':
             
             planning_horizon = (roster_end - roster_start).days + 1
             st.markdown(f"""
-                <div style="background-color: #F1F5F9; padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; color: #475569; border-left: 4px solid {PRIMARY_COLOR};">
+                <div style="background-color: {t['bg']}; padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; color: {t['subtext']}; border-left: 4px solid {t['primary']};">
                     📅 Period: <b>{roster_start.strftime('%d %b %Y')}</b> to <b>{roster_end.strftime('%d %b %Y')}</b><br>
                     ⏱️ Total Duration: <b>{planning_horizon} Days</b>
                 </div>
@@ -2902,16 +3025,25 @@ elif st.session_state.current_page == 'Generate Schedule':
             for n in dept_nurses:
                 n_copy = copy.deepcopy(n)
                 try:
-                    leave_indices = leave_db.get_leave_days_for_nurse(
+                    # 1. Extract Approved Leaves (OFF)
+                    n_copy['leave_days'] = leave_db.get_leave_days_for_nurse(
                         supabase, 
                         st.session_state.current_user, 
                         n['employee_id'], 
                         roster_start, 
                         roster_end
                     )
-                    n_copy['leave_days'] = leave_indices
-                except:
+                    # 2. Extract Compulsory Shift Pins (M, E, N, etc.)
+                    n_copy['must_have_shifts'] = leave_db.get_must_have_shifts_for_nurse(
+                        supabase,
+                        st.session_state.current_user,
+                        n['employee_id'],
+                        roster_start,
+                        roster_end
+                    )
+                except Exception as e:
                     n_copy['leave_days'] = []
+                    n_copy['must_have_shifts'] = []
                 nurses_with_leave.append(n_copy)
 
             try:
@@ -3240,11 +3372,11 @@ elif st.session_state.current_page == 'Generate Schedule':
                 """, unsafe_allow_html=True)
             else:
                 st.markdown(f"""
-                    <div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 1.25rem; border-radius: 0 8px 8px 0; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
+                    <div style="background-color: {t['accent']}; border-left: 4px solid {t['primary']}; padding: 1.25rem; border-radius: 0 8px 8px 0; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
                         <div style="font-size: 1.5rem;">✅</div>
                         <div>
-                            <div style="font-weight: 700; color: #065F46;">Perfect Compliance</div>
-                            <div style="font-size: 0.875rem; color: #059669;">No health or fairness constraints are violated in this roster.</div>
+                            <div style="font-weight: 700; color: {t['primary']};">Perfect Compliance</div>
+                            <div style="font-size: 0.875rem; color: {t['text']};">No health or fairness constraints are violated in this roster.</div>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
