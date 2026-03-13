@@ -8,8 +8,17 @@ import calendar
 from model import NurseRosteringModel
 from supabase import create_client, Client
 import staff_db
+# Professional Roster Component Integration
 from professional_roster_component import professional_roster
-from auth_utils import render_login_page, log_audit, save_user_prefs, load_user, set_current_user
+
+# Authentication and Authorization Utilities
+from auth_utils import (
+    render_login_page,
+    log_audit,
+    save_user_prefs,
+    load_user,
+    set_current_user
+)
 import leave_db
 
 # Removed local JSON file references; Supabase is the sole store.
