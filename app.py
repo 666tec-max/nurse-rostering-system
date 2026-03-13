@@ -11,14 +11,14 @@ import staff_db
 # Professional Roster Component Integration
 from professional_roster_component import professional_roster
 
-# Authentication and Authorization Utilities
-from auth_utils import (
-    render_login_page,
-    log_audit,
-    save_user_prefs,
-    load_user,
-    set_current_user
-)
+try:
+    from auth_utils import render_login_page, log_audit, save_user_prefs, load_user, set_current_user
+except ImportError as e:
+    import streamlit as st
+    st.error(f"ImportError in auth_utils: {e}")
+    import traceback
+    st.code(traceback.format_exc())
+    st.stop()
 import leave_db
 
 # Removed local JSON file references; Supabase is the sole store.
@@ -2902,7 +2902,13 @@ elif st.session_state.current_page == 'Generate Schedule':
             for n in dept_nurses:
                 n_copy = copy.deepcopy(n)
                 try:
-                    leave_indices = leave_db.get_leave_days_for_nurse(supabase, n['employee_id'], roster_start, roster_end, st.session_state.current_user)
+                    leave_indices = leave_db.get_leave_days_for_nurse(
+                        supabase, 
+                        st.session_state.current_user, 
+                        n['employee_id'], 
+                        roster_start, 
+                        roster_end
+                    )
                     n_copy['leave_days'] = leave_indices
                 except:
                     n_copy['leave_days'] = []
