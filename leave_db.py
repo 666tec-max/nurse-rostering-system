@@ -4,10 +4,10 @@ leave_db.py — CRUD helpers for the leave_requests table.
 from datetime import date, timedelta
 
 
-def fetch_leave_requests(supabase, employee_id=None, start_date=None, end_date=None):
-    """Fetch leave requests, optionally filtered by employee and/or date overlap."""
+def fetch_leave_requests(supabase, owner_id, employee_id=None, start_date=None, end_date=None):
+    """Fetch leave requests for a specific owner, optionally filtered by employee and/or date overlap."""
     try:
-        q = supabase.table("leave_requests").select("*")
+        q = supabase.table("leave_requests").select("*").eq("owner_user_id", owner_id)
         if employee_id:
             q = q.eq("employee_id", employee_id)
         res = q.order("start_date").execute()
@@ -26,10 +26,11 @@ def fetch_leave_requests(supabase, employee_id=None, start_date=None, end_date=N
         return []
 
 
-def insert_leave_request(supabase, employee_id, start_date, end_date, leave_type="AL",
+def insert_leave_request(supabase, owner_id, employee_id, start_date, end_date, leave_type="AL",
                           status="Approved", remarks=""):
     try:
         supabase.table("leave_requests").insert({
+            "owner_user_id": owner_id,
             "employee_id": employee_id,
             "start_date": str(start_date),
             "end_date": str(end_date),
@@ -42,20 +43,20 @@ def insert_leave_request(supabase, employee_id, start_date, end_date, leave_type
         return str(e)
 
 
-def delete_leave_request(supabase, leave_id):
+def delete_leave_request(supabase, owner_id, leave_id):
     try:
-        supabase.table("leave_requests").delete().eq("id", str(leave_id)).execute()
+        supabase.table("leave_requests").delete().eq("id", str(leave_id)).eq("owner_user_id", owner_id).execute()
         return True
     except Exception as e:
         return str(e)
 
 
-def get_leave_days_for_nurse(supabase, employee_id, roster_start, roster_end):
+def get_leave_days_for_nurse(supabase, owner_id, employee_id, roster_start, roster_end):
     """
     Returns a list of day-indices (0-based from roster_start) that fall within
-    approved leave for the given nurse and date range.
+    approved leave for the given nurse and date range, scoped to the owner.
     """
-    rows = fetch_leave_requests(supabase, employee_id=employee_id,
+    rows = fetch_leave_requests(supabase, owner_id=owner_id, employee_id=employee_id,
                                  start_date=roster_start, end_date=roster_end)
     leave_indices = set()
     for row in rows:

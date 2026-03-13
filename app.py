@@ -21,7 +21,122 @@ GRADES_DATA_FILE = ""
 LEAVES_DATA_FILE = ""
 DEMAND_DATA_FILE = ""
 
-st.set_page_config(page_title="Nurse Rostering System", layout="wide")
+st.set_page_config(
+    page_title="Nurse Rostering System",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://www.extremelyhelpful.com/help',
+        'Report a bug': "https://www.extremelyhelpful.com/bug",
+        'About': "# Nurse Rostering System\nModern Hospital Staff Management Dashboard."
+    }
+)
+
+# ---------------------------------------------------------------------
+# Dashboard Design System (CSS)
+# ---------------------------------------------------------------------
+PRIMARY_COLOR = "#2563EB"  # Hospital Blue
+BG_COLOR = "#F8FAFC"      # Light Neutral
+CARD_BG = "#FFFFFF"
+TEXT_COLOR = "#1E293B"
+BORDER_COLOR = "#E2E8F0"
+
+NEW_CSS = f"""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    /* Global styles */
+    .stApp {{
+        background-color: {BG_COLOR};
+        color: {TEXT_COLOR};
+        font-family: 'Inter', sans-serif;
+    }}
+
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {{
+        background-color: #FFFFFF;
+        border-right: 1px solid {BORDER_COLOR};
+    }}
+    
+    [data-testid="stSidebar"] .stButton button {{
+        border: none;
+        background: transparent;
+        text-align: left;
+        justify-content: flex-start;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        transition: all 0.2s;
+    }}
+    
+    [data-testid="stSidebar"] .stButton button:hover {{
+        background-color: #F1F5F9;
+        color: {PRIMARY_COLOR};
+    }}
+    
+    /* Header bar */
+    .app-header {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 2rem;
+        background-color: #FFFFFF;
+        border-bottom: 1px solid {BORDER_COLOR};
+        margin: -4rem -2rem 2rem -2rem;
+        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    }}
+    
+    .header-title {{
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: {PRIMARY_COLOR};
+    }}
+    
+    .user-info {{
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #64748B;
+    }}
+    
+    /* Dashboard Cards */
+    .dashboard-card {{
+        background-color: {CARD_BG};
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border: 1px solid {BORDER_COLOR};
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        margin-bottom: 1rem;
+    }}
+    
+    .card-header {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }}
+    
+    .card-title {{
+        font-size: 1rem;
+        font-weight: 600;
+        color: #0F172A;
+    }}
+    
+    /* Tables in Cards */
+    .stDataFrame, .stTable {{
+        border-radius: 0.5rem;
+        overflow: hidden;
+    }}
+    
+    /* Hide default Streamlit decoration */
+    div[data-testid="stDecoration"] {{
+        background-image: none;
+        background-color: {PRIMARY_COLOR};
+    }}
+</style>
+"""
+
 
 # --- Supabase Initialization ---
 try:
@@ -32,157 +147,9 @@ except Exception as e:
     st.error(f"Supabase configuration error: {e}")
     st.stop()
 
-# ---------------------------------------------------------------------
-# Theme Support
-# ---------------------------------------------------------------------
-if 'theme' not in st.session_state:
-    st.session_state.theme = 'Eye Comfort'
+# Theme CSS is now handled by NEW_CSS at the top
+st.markdown(NEW_CSS, unsafe_allow_html=True)
 
-THEME_CSS = {
-    'Light': '',
-    'Dark': '''
-    <style>
-        .stApp, .main, [data-testid="stAppViewContainer"] {
-            background-color: #1E1E2E !important;
-            color: #CDD6F4 !important;
-        }
-        [data-testid="stSidebar"] {
-            background-color: #181825 !important;
-            color: #CDD6F4 !important;
-        }
-        [data-testid="stSidebar"] * {
-            color: #CDD6F4 !important;
-        }
-        .stApp header, [data-testid="stHeader"] {
-            background-color: #1E1E2E !important;
-        }
-        h1, h2, h3, h4, h5, h6, p, span, label, .stMarkdown, .stText {
-            color: #CDD6F4 !important;
-        }
-        .stDataFrame, .stTable {
-            background-color: #313244 !important;
-        }
-        [data-testid="stDataFrameResizable"] {
-            background-color: #313244 !important;
-        }
-        .stTextInput > div > div > input,
-        .stSelectbox > div > div,
-        .stDateInput > div > div > input {
-            background-color: #313244 !important;
-            color: #CDD6F4 !important;
-        }
-        .stExpander {
-            border-color: #45475A !important;
-        }
-        [data-testid="stExpander"] details {
-            background-color: #181825 !important;
-        }
-        [data-testid="stExpander"] summary {
-            background-color: #181825 !important;
-            color: #CDD6F4 !important;
-        }
-        [data-testid="stExpander"] summary:hover {
-            background-color: #313244 !important;
-        }
-        /* Sidebar secondary buttons */
-        [data-testid="stSidebar"] button[kind="secondary"],
-        [data-testid="stSidebar"] .stButton > button:not([kind="primary"]) {
-            background-color: #313244 !important;
-            color: #CDD6F4 !important;
-            border-color: #45475A !important;
-        }
-        [data-testid="stSidebar"] button[kind="secondary"]:hover,
-        [data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
-            background-color: #45475A !important;
-            border-color: #585B70 !important;
-        }
-        /* Main area secondary buttons */
-        .stApp button[kind="secondary"],
-        .stApp .stButton > button:not([kind="primary"]) {
-            background-color: #313244 !important;
-            color: #CDD6F4 !important;
-            border-color: #45475A !important;
-        }
-        .stApp button[kind="secondary"]:hover,
-        .stApp .stButton > button:not([kind="primary"]):hover {
-            background-color: #45475A !important;
-            border-color: #585B70 !important;
-        }
-    </style>
-    ''',
-    'Eye Comfort': '''
-    <style>
-        .stApp, .main, [data-testid="stAppViewContainer"] {
-            background-color: #FDF6E3 !important;
-            color: #5C5040 !important;
-        }
-        [data-testid="stSidebar"] {
-            background-color: #F5EDDA !important;
-            color: #5C5040 !important;
-        }
-        [data-testid="stSidebar"] * {
-            color: #5C5040 !important;
-        }
-        .stApp header, [data-testid="stHeader"] {
-            background-color: #FDF6E3 !important;
-        }
-        h1, h2, h3, h4, h5, h6, p, span, label, .stMarkdown, .stText {
-            color: #5C5040 !important;
-        }
-        .stDataFrame, .stTable {
-            background-color: #F5EDDA !important;
-        }
-        [data-testid="stDataFrameResizable"] {
-            background-color: #F5EDDA !important;
-        }
-        .stTextInput > div > div > input,
-        .stSelectbox > div > div,
-        .stDateInput > div > div > input {
-            background-color: #FEFBF3 !important;
-            color: #5C5040 !important;
-        }
-        .stExpander {
-            border-color: #E0D6C3 !important;
-        }
-        [data-testid="stExpander"] details {
-            background-color: #F5EDDA !important;
-        }
-        [data-testid="stExpander"] summary {
-            background-color: #F5EDDA !important;
-            color: #5C5040 !important;
-        }
-        [data-testid="stExpander"] summary:hover {
-            background-color: #EDE5D2 !important;
-        }
-        /* Sidebar secondary buttons */
-        [data-testid="stSidebar"] button[kind="secondary"],
-        [data-testid="stSidebar"] .stButton > button:not([kind="primary"]) {
-            background-color: #FEFBF3 !important;
-            color: #5C5040 !important;
-            border-color: #E0D6C3 !important;
-        }
-        [data-testid="stSidebar"] button[kind="secondary"]:hover,
-        [data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
-            background-color: #EDE5D2 !important;
-            border-color: #D4C9B4 !important;
-        }
-        /* Main area secondary buttons */
-        .stApp button[kind="secondary"],
-        .stApp .stButton > button:not([kind="primary"]) {
-            background-color: #FEFBF3 !important;
-            color: #5C5040 !important;
-            border-color: #E0D6C3 !important;
-        }
-        .stApp button[kind="secondary"]:hover,
-        .stApp .stButton > button:not([kind="primary"]):hover {
-            background-color: #EDE5D2 !important;
-            border-color: #D4C9B4 !important;
-        }
-    </style>
-    '''
-}
-
-st.markdown(THEME_CSS.get(st.session_state.theme, ''), unsafe_allow_html=True)
 
 # ── Auth Gate ──────────────────────────────────────────────────────────
 if 'logged_in' not in st.session_state:
@@ -222,18 +189,18 @@ def show_notifications():
         st.toast(toast_msg, icon=icon)
         st.session_state.pending_notification = None
 
-def load_data(table_name, file_path, default_data):
-    """Load data from Supabase, falling back to JSON or default."""
+def load_data(table_name, file_path, default_data, owner_id):
+    """Load data from Supabase for a specific owner, falling back to JSON or default."""
     try:
-        # 1. Try Supabase
-        response = supabase.table(table_name).select("*").execute()
+        # 1. Try Supabase with owner filter
+        response = supabase.table(table_name).select("*").eq("owner_user_id", owner_id).execute()
         if response.data:
             # Table-specific post-processing
             if table_name == "grades":
                 # Reconstruct hierarchy: list of lists
                 layers = {}
                 for g in response.data:
-                    idx = g['layer_index']
+                    idx = g.get('layer_index', 0)
                     if idx not in layers: layers[idx] = []
                     layers[idx].append({"code": g['code'], "name": g['name'], "colour": g.get("colour", "#FFFFFF")})
                 return [layers[i] for i in sorted(layers.keys())]
@@ -258,20 +225,10 @@ def load_data(table_name, file_path, default_data):
         st.warning(f"Could not load {table_name} from Supabase: {e}")
 
     # 2. Fallback to default memory structure if Supabase fails
-    json_data = default_data
-    if file_path and os.path.exists(file_path):
-        try:
-            with open(file_path, "r") as f:
-                loaded = json.load(f)
-                if loaded:
-                    json_data = loaded
-        except Exception as e:
-            st.error(f"Error loading {file_path}: {e}")
-    
-    return json_data
+    return default_data
 
-def save_data(table_name, file_path, data):
-    """Save data to Supabase and fallback to JSON."""
+def save_data(table_name, file_path, data, owner_id):
+    """Save data to Supabase for a specific owner and fallback to JSON."""
     try:
         # Success flag for UI feedback
         cloud_success = False
@@ -283,13 +240,14 @@ def save_data(table_name, file_path, data):
             for idx, layer in enumerate(data):
                 for g in layer:
                     flattened.append({
+                        "owner_user_id": owner_id,
                         "layer_index": idx, 
                         "code": g['code'], 
                         "name": g['name'],
                         "colour": g.get('colour', '#FFFFFF')
                     })
-            # Clear and repopulate (simple for small config tables)
-            supabase.table(table_name).delete().neq("id", -1).execute() # Clear all
+            # Clear and repopulate for this specific owner
+            supabase.table(table_name).delete().eq("owner_user_id", owner_id).execute()
             if flattened:
                 supabase.table(table_name).insert(flattened).execute()
             cloud_success = True
@@ -303,27 +261,24 @@ def save_data(table_name, file_path, data):
                     continue
                 
                 for d_key, outer_val in typ_data.items():
-                    # For 'default', outer_val is skill_dict (shift_code: skill_dict)
-                    # For 'overrides', outer_val is a dict of shifts (date_str: {shift_code: skill_dict})
-                    
                     if typ == "default":
-                        # d_key is shift_code, outer_val is skill_dict
                         if isinstance(outer_val, dict):
                             for skill, count in outer_val.items():
                                 rows.append({
+                                    "owner_user_id": owner_id,
                                     "type": typ,
-                                    "date_key": d_key, # Use shift_code as date_key for defaults
+                                    "date_key": d_key,
                                     "shift_code": d_key,
                                     "skill_code": None if skill == "Total" else skill,
                                     "count": count
                                 })
                     else:
-                        # typ is 'overrides', d_key is date_str, outer_val is {shift_code: skill_dict}
                         if isinstance(outer_val, dict):
                             for s_code, skill_dict in outer_val.items():
                                 if isinstance(skill_dict, dict):
                                     for skill, count in skill_dict.items():
                                         rows.append({
+                                            "owner_user_id": owner_id,
                                             "type": typ,
                                             "date_key": d_key,
                                             "shift_code": s_code,
@@ -331,17 +286,14 @@ def save_data(table_name, file_path, data):
                                             "count": count
                                         })
             
-            supabase.table(table_name).delete().neq("id", -1).execute()
+            supabase.table(table_name).delete().eq("owner_user_id", owner_id).execute()
             if rows:
                 supabase.table(table_name).insert(rows).execute()
             cloud_success = True
             
         elif table_name in ["nurses", "shifts", "skills", "leaves", "departments"]:
-            # Standard UPSERT
-            # Map logical table name "nurses" to physical table "staff"
             actual_table = "staff" if table_name == "nurses" else table_name
             
-            # Filter columns to only those present in the database to prevent PostgREST key mismatch crashes
             table_columns = {
                 "staff": ["employee_id", "name", "grade", "leave_days", "skills", "department_id", "allow_night_shift", "max_consecutive_work_days", "ic_number", "phone", "email"],
                 "shifts": ["id", "code", "name", "start", "end", "duration", "type", "color", "required_skills"],
@@ -353,7 +305,7 @@ def save_data(table_name, file_path, data):
             
             clean_data = []
             for item in data:
-                clean_item = {}
+                clean_item = {"owner_user_id": owner_id}
                 for k in allowed_keys:
                     if k == "employee_id":
                         clean_item[k] = item.get("employee_id", item.get("id"))
@@ -369,7 +321,8 @@ def save_data(table_name, file_path, data):
                         clean_item[k] = item.get(k)
                 clean_data.append(clean_item)
                 
-            supabase.table(actual_table).upsert(clean_data).execute()
+            if clean_data:
+                supabase.table(actual_table).upsert(clean_data).execute()
             cloud_success = True
             
     except Exception as e:
@@ -428,10 +381,10 @@ date_labels = [(roster_start + timedelta(days=d)).strftime("%a, %b %d") for d in
 # Data Initialization
 # ---------------------------------------------------------------------
 if 'departments' not in st.session_state:
-    st.session_state.departments = load_data("departments", DEPARTMENTS_DATA_FILE, [{"id": "default-dept", "name": "General Department", "description": "Default department"}])
+    st.session_state.departments = load_data("departments", DEPARTMENTS_DATA_FILE, [{"id": "default-dept", "name": "General Department", "description": "Default department"}], st.session_state.current_user)
 
 if 'shifts' not in st.session_state:
-    st.session_state.shifts = load_data("shifts", SHIFTS_DATA_FILE, DEFAULT_SHIFTS)
+    st.session_state.shifts = load_data("shifts", SHIFTS_DATA_FILE, DEFAULT_SHIFTS, st.session_state.current_user)
     for s in st.session_state.shifts:
         if 'color' not in s:
             s['color'] = "#E0E0E0"
@@ -439,19 +392,19 @@ if 'shifts' not in st.session_state:
             s['required_skills'] = []
 
 if 'skills' not in st.session_state:
-    st.session_state.skills = load_data("skills", SKILLS_DATA_FILE, DEFAULT_SKILLS)
+    st.session_state.skills = load_data("skills", SKILLS_DATA_FILE, DEFAULT_SKILLS, st.session_state.current_user)
     for sk in st.session_state.skills:
         if 'color' not in sk:
             sk['color'] = "#F0F4F8"
     st.session_state.skills.sort(key=lambda x: x['code'].upper())
 
 if 'nurses' not in st.session_state:
-    raw_staff = staff_db.fetch_all_staff(supabase)
+    raw_staff = staff_db.fetch_all_staff(supabase, st.session_state.current_user)
     if not raw_staff:
-        # Fallback to JSON or defaults if Supabase is empty
+        # Fallback if Supabase is empty
         raw_staff = load_data("nurses", NURSE_DATA_FILE, [
             {'employee_id': f'N{i+1:03}', 'name': f'Nurse {i+1}', 'grade': 'RN', 'leave_days': [], 'skills': [], 'department_id': 'default-dept', 'allow_night_shift': True, 'max_consecutive_work_days': 6} for i in range(10)
-        ])
+        ], st.session_state.current_user)
     
     # Map employee_id to id for backward compatibility
     for s in raw_staff:
@@ -464,16 +417,13 @@ if 'nurses' not in st.session_state:
     st.session_state.nurses = raw_staff
 
 if 'grades' not in st.session_state:
-    # Hierarchy is a list of layers, from top (senior) to bottom (junior)
-    # Each layer is a list of grade objects: {"code": "SN", "name": "Staff Nurse"}
     raw_grades = load_data("grades", GRADES_DATA_FILE, [
         [{"code": "SN", "name": "Sister"}],
         [{"code": "RN", "name": "Registered Nurse"}],
         [{"code": "EN", "name": "Enrolled Nurse"}],
         [{"code": "NA", "name": "Nursing Assistant"}]
-    ])
+    ], st.session_state.current_user)
     
-    # Robust check: if it's a flat list, convert each item to its own layer
     if raw_grades and isinstance(raw_grades, list) and len(raw_grades) > 0 and isinstance(raw_grades[0], dict):
         st.session_state.grades = [[g] for g in raw_grades]
     else:
@@ -488,14 +438,13 @@ if 'leaves' not in st.session_state:
         {"code": "SL", "name": "Sick Leave", "description": "Paid sick leave", "color": "#FFF5F5", "is_paid": True},
         {"code": "UL", "name": "Unpaid Leave", "description": "Unpaid leave of absence", "color": "#F7FAFC", "is_paid": False}
     ]
-    st.session_state.leaves = load_data("leaves", LEAVES_DATA_FILE, DEFAULT_LEAVES)
+    st.session_state.leaves = load_data("leaves", LEAVES_DATA_FILE, DEFAULT_LEAVES, st.session_state.current_user)
 
 if 'demand' not in st.session_state:
-    # Default demand: { 'default': { 'shift_code': { 'skill_code': min_count, 'Total': min_count } }, 'overrides': { 'YYYY-MM-DD': { ... } } }
     st.session_state.demand = load_data("demand", DEMAND_DATA_FILE, {
         "default": {},
         "overrides": {}
-    })
+    }, st.session_state.current_user)
     # Pre-populate default demand if empty
     if not st.session_state.demand["default"]:
         for s in st.session_state.shifts:
@@ -630,7 +579,7 @@ def render_manage_shifts():
                         st.session_state.shifts.append(new_shift)
                         # Automatic Sort by Start Time
                         st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
-                        save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
+                        save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts, st.session_state.current_user)
                         notify("Shift added successfully:", detail=f"{new_shift_code} - {new_shift_name} ({new_shift_type})")
                         
                         # Clear form state
@@ -654,10 +603,10 @@ def render_manage_shifts():
         if st.button(f"🗑️ Delete {len(selected_for_deletion)} Selected Shifts", type="primary"):
             shift_codes_to_del = [s['code'] for s in st.session_state.shifts if s['id'] in selected_for_deletion]
             for code in shift_codes_to_del:
-                try: supabase.table("shifts").delete().eq("code", code).execute()
+                try: supabase.table("shifts").delete().eq("code", code).eq("owner_user_id", st.session_state.current_user).execute()
                 except: pass
             st.session_state.shifts = [s for s in st.session_state.shifts if s['id'] not in selected_for_deletion]
-            save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
+            save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts, st.session_state.current_user)
             for sid in selected_for_deletion:
                 if f"bulk_del_shift_{sid}" in st.session_state: del st.session_state[f"bulk_del_shift_{sid}"]
             notify("Bulk Delete Successful", detail=f"Removed {len(selected_for_deletion)} shifts.")
@@ -703,7 +652,7 @@ def render_manage_shifts():
                 if st.button("🗑️", key=f"del_btn_{stable_key}", help="Delete Shift", use_container_width=True):
                     deleted_name = st.session_state.shifts[i]['name']
                     st.session_state.shifts.pop(i)
-                    save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
+                    save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts, st.session_state.current_user)
                     notify("Shift deleted successfully:", detail=f"'{deleted_name}' removed")
                     st.rerun()
             
@@ -759,7 +708,7 @@ def render_manage_shifts():
                             st.rerun()
                         else:
                             if edit_code != old_code:
-                                try: supabase.table("shifts").update({"code": edit_code}).eq("code", old_code).execute()
+                                try: supabase.table("shifts").update({"code": edit_code}).eq("code", old_code).eq("owner_user_id", st.session_state.current_user).execute()
                                 except: pass
                                 
                                 # Cascade local demand references
@@ -780,7 +729,7 @@ def render_manage_shifts():
                             
                             # Automatic Sort by Start Time
                             st.session_state.shifts.sort(key=lambda x: x.get('start', '00:00'))
-                            save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts)
+                            save_data("shifts", SHIFTS_DATA_FILE, st.session_state.shifts, st.session_state.current_user)
                             st.session_state.editing_shift_id = None
                             notify("Shift updated successfully:", detail=f"{s['code']} - {s['name']}")
                             st.rerun()
@@ -886,7 +835,7 @@ def render_manage_grades():
     with col_add_layer:
         if st.button("➕ Add Layer to Bottom", use_container_width=True):
             st.session_state.grades.append([])
-            save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+            save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
             notify("Layer added:", detail="New empty layer added to bottom of pyramid")
             st.rerun()
     with col_remove_layer:
@@ -895,7 +844,7 @@ def render_manage_grades():
                 bottom = st.session_state.grades[-1]
                 if not bottom:
                     st.session_state.grades.pop()
-                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
                     notify("Layer removed:", detail="Empty bottom layer removed")
                     st.rerun()
                 else:
@@ -907,7 +856,7 @@ def render_manage_grades():
         if c1.button("✅ Confirm Remove", type="primary", use_container_width=True):
             st.session_state.grades.pop()
             st.session_state._confirm_remove_layer = False
-            save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+            save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
             notify("Layer removed:", detail="Bottom layer and its grades removed")
             st.rerun()
         if c2.button("❌ Cancel", use_container_width=True):
@@ -939,7 +888,7 @@ def render_manage_grades():
                         st.error(f"Grade code '{new_code.upper()}' already exists!")
                     else:
                         st.session_state.grades[i].append({"code": new_code.upper(), "name": new_name, "colour": new_color})
-                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
                         notify("Grade added:", detail=f"'{new_code.upper()}' added to Level {i + 1}")
                         st.rerun()
 
@@ -954,7 +903,7 @@ def render_manage_grades():
                         if gc3.button("⬆️", key=f"mu_{i}_{j}", help="Move to higher layer"):
                             moved = st.session_state.grades[i].pop(j)
                             st.session_state.grades[i - 1].append(moved)
-                            save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                            save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
                             notify("Grade moved:", detail=f"'{grade['code']}' moved to Level {i}")
                             st.rerun()
                     else:
@@ -964,7 +913,7 @@ def render_manage_grades():
                         if gc4.button("⬇️", key=f"md_{i}_{j}", help="Move to lower layer"):
                             moved = st.session_state.grades[i].pop(j)
                             st.session_state.grades[i + 1].append(moved)
-                            save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                            save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
                             notify("Grade moved:", detail=f"'{grade['code']}' moved to Level {i + 2}")
                             st.rerun()
                     else:
@@ -973,7 +922,7 @@ def render_manage_grades():
                         deleted = st.session_state.grades[i].pop(j)
                         # Clean up empty layers
                         st.session_state.grades = [l for l in st.session_state.grades if l]
-                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                        save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
                         notify("Grade deleted:", detail=f"'{deleted['code']}' removed")
                         st.rerun()
             else:
@@ -984,13 +933,13 @@ def render_manage_grades():
             if i > 0:
                 if ml.button(f"⬆️ Move Layer {i + 1} Up", key=f"lay_up_{i}", use_container_width=True):
                     st.session_state.grades[i - 1], st.session_state.grades[i] = st.session_state.grades[i], st.session_state.grades[i - 1]
-                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
                     notify("Layer moved:", detail=f"Level {i + 1} moved up")
                     st.rerun()
             if i < total - 1:
                 if mr.button(f"⬇️ Move Layer {i + 1} Down", key=f"lay_dn_{i}", use_container_width=True):
                     st.session_state.grades[i], st.session_state.grades[i + 1] = st.session_state.grades[i + 1], st.session_state.grades[i]
-                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades)
+                    save_data("grades", GRADES_DATA_FILE, st.session_state.grades, st.session_state.current_user)
                     notify("Layer moved:", detail=f"Level {i + 1} moved down")
                     st.rerun()
 
@@ -1026,7 +975,7 @@ def render_manage_leave_types():
                             "is_paid": new_is_paid
                         }
                         st.session_state.leaves.append(new_leave)
-                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves, st.session_state.current_user)
                         notify("Leave Type added successfully:", detail=f"{new_code} - {new_name}")
                         
                         # Clear form state and refresh
@@ -1043,10 +992,10 @@ def render_manage_leave_types():
     if selected_for_deletion:
         if st.button(f"🗑️ Delete {len(selected_for_deletion)} Selected Leaves", type="primary"):
             for code in selected_for_deletion:
-                try: supabase.table("leaves").delete().eq("code", code).execute()
+                try: supabase.table("leaves").delete().eq("code", code).eq("owner_user_id", st.session_state.current_user).execute()
                 except: pass
             st.session_state.leaves = [l for l in st.session_state.leaves if l['code'] not in selected_for_deletion]
-            save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+            save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves, st.session_state.current_user)
             for code in selected_for_deletion:
                 if f"bulk_del_leave_{code}" in st.session_state: del st.session_state[f"bulk_del_leave_{code}"]
             notify("Bulk Delete Successful", detail=f"Removed {len(selected_for_deletion)} leave types.")
@@ -1099,7 +1048,7 @@ def render_manage_leave_types():
                                 st.rerun()
                             else:
                                 if edit_code != old_code:
-                                    try: supabase.table("leaves").update({"code": edit_code}).eq("code", old_code).execute()
+                                    try: supabase.table("leaves").update({"code": edit_code}).eq("code", old_code).eq("owner_user_id", st.session_state.current_user).execute()
                                     except: pass
                                 
                                 leave['code'] = edit_code
@@ -1108,17 +1057,17 @@ def render_manage_leave_types():
                                 leave['description'] = edit_desc
                                 leave['color'] = edit_color
                             
-                                save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+                                save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves, st.session_state.current_user)
                                 notify("Leave type updated successfully:", detail=f"Changes for '{leave['name']}' saved")
                                 st.rerun()
                 with col_del:
                     if st.button("Delete Type", key=f"del_leave_{i}", type="primary", use_container_width=True):
                         deleted_leave = st.session_state.leaves[i]['name']
                         try:
-                            supabase.table("leaves").delete().eq("code", leave.get('code')).execute()
+                            supabase.table("leaves").delete().eq("code", leave.get('code')).eq("owner_user_id", st.session_state.current_user).execute()
                         except: pass
                         st.session_state.leaves.pop(i)
-                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves)
+                        save_data("leaves", LEAVES_DATA_FILE, st.session_state.leaves, st.session_state.current_user)
                         notify("Leave type deleted successfully:", detail=f"'{deleted_leave}' removed")
                         st.rerun()
 
@@ -1572,7 +1521,7 @@ def render_manage_staffs():
                                         else:
                                             # Create missing skills dynamically
                                             try:
-                                                supabase.table("skills").insert({"code": rs, "name": rs}).execute()
+                                                supabase.table("skills").insert({"code": rs, "name": rs, "owner_user_id": st.session_state.current_user}).execute()
                                                 existing_skills.add(rs)
                                                 st.session_state.skills.append({"code": rs, "name": rs})
                                                 row_skills.append(rs)
@@ -1807,7 +1756,7 @@ def render_manage_skills():
                         }
                         st.session_state.skills.append(new_skill)
                         st.session_state.skills.sort(key=lambda x: x['code'].upper())
-                        save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
+                        save_data("skills", SKILLS_DATA_FILE, st.session_state.skills, st.session_state.current_user)
                         notify("Skill added successfully:", detail=f"{new_skill_code} - {new_skill_name}")
                         
                         # Clear form keys
@@ -1859,10 +1808,10 @@ def render_manage_skills():
                     if st.button("🗑️", key=f"del_skill_{stable_key}", help="Delete Skill"):
                         deleted_skill = st.session_state.skills[i]['name']
                         try:
-                            supabase.table("skills").delete().eq("code", skill['code']).execute()
+                            supabase.table("skills").delete().eq("code", skill['code']).eq("owner_user_id", st.session_state.current_user).execute()
                         except: pass
                         st.session_state.skills.pop(i)
-                        save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
+                        save_data("skills", SKILLS_DATA_FILE, st.session_state.skills, st.session_state.current_user)
                         notify("Skill deleted successfully:", detail=f"'{deleted_skill}' removed")
                         st.rerun()
 
@@ -1885,20 +1834,20 @@ def render_manage_skills():
                                 st.rerun()
                             else:
                                 if edit_code != old_code:
-                                    try: supabase.table("skills").update({"code": edit_code}).eq("code", old_code).execute()
+                                    try: supabase.table("skills").update({"code": edit_code}).eq("code", old_code).eq("owner_user_id", st.session_state.current_user).execute()
                                     except: pass
                                     for n in st.session_state.nurses:
                                         if old_code in n.get('skills', []):
                                             n['skills'] = [edit_code if sk == old_code else sk for sk in n['skills']]
                                     import threading
-                                    threading.Thread(target=save_data, args=("nurses", NURSES_DATA_FILE, st.session_state.nurses)).start()
+                                    threading.Thread(target=save_data, args=("nurses", NURSE_DATA_FILE, st.session_state.nurses, st.session_state.current_user)).start()
                                 
                                 skill['code'] = edit_code
                                 skill['name'] = edit_name
                                 skill['description'] = edit_desc
                                 skill['color'] = edit_color
                                 st.session_state.skills.sort(key=lambda x: x['code'].upper())
-                                save_data("skills", SKILLS_DATA_FILE, st.session_state.skills)
+                                save_data("skills", SKILLS_DATA_FILE, st.session_state.skills, st.session_state.current_user)
                                 st.session_state.editing_skill_id = None
                                 notify("Skill updated successfully:", detail=f"{edit_code} - {edit_name}")
                                 st.rerun()
@@ -1983,7 +1932,7 @@ def render_manage_departments():
                         }
                         st.session_state.departments.append(new_dept)
                         st.session_state.departments.sort(key=lambda x: x['name'].upper())
-                        save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
+                        save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments, st.session_state.current_user)
                         notify("Department added successfully:", detail=f"[{new_dept_id}] {new_dept_name} created")
                         
                         # Clear form keys
@@ -2013,11 +1962,11 @@ def render_manage_departments():
                     notify("Partial Deletion", detail=f"{len(selected_for_deletion) - len(safe_to_delete)} departments could not be deleted because staff are assigned to them.", type="warning")
                 
                 for dept_id in safe_to_delete:
-                    try: supabase.table("departments").delete().eq("id", dept_id).execute()
+                    try: supabase.table("departments").delete().eq("id", dept_id).eq("owner_user_id", st.session_state.current_user).execute()
                     except: pass
                 
                 st.session_state.departments = [d for d in st.session_state.departments if d['id'] not in safe_to_delete]
-                save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
+                save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments, st.session_state.current_user)
                 
                 for dept_id in selected_for_deletion:
                     if f"bulk_del_dept_{dept_id}" in st.session_state: del st.session_state[f"bulk_del_dept_{dept_id}"]
@@ -2062,10 +2011,10 @@ def render_manage_departments():
                         else:
                             deleted_name = dept['name']
                             try:
-                                supabase.table("departments").delete().eq("id", dept['id']).execute()
+                                supabase.table("departments").delete().eq("id", dept['id']).eq("owner_user_id", st.session_state.current_user).execute()
                             except: pass
                             st.session_state.departments.pop(i)
-                            save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
+                            save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments, st.session_state.current_user)
                             notify("Department deleted successfully:", detail=f"'{deleted_name}' removed")
                             st.rerun()
 
@@ -2094,7 +2043,7 @@ def render_manage_departments():
                             else:
                                 if edit_id != old_id:
                                     # Rename the ID directly in supabase to cascade FOREIGN KEY changes
-                                    try: supabase.table("departments").update({"id": edit_id, "colour": edit_colour}).eq("id", old_id).execute()
+                                    try: supabase.table("departments").update({"id": edit_id, "colour": edit_colour}).eq("id", old_id).eq("owner_user_id", st.session_state.current_user).execute()
                                     except: pass
                                     # Cascade locally to nurses
                                     for n in st.session_state.nurses:
@@ -2102,16 +2051,16 @@ def render_manage_departments():
                                             n["department_id"] = edit_id
                                     # Background save nurses to sync the local cascade
                                     import threading
-                                    threading.Thread(target=save_data, args=("nurses", NURSE_DATA_FILE, st.session_state.nurses)).start()
+                                    threading.Thread(target=save_data, args=("nurses", NURSE_DATA_FILE, st.session_state.nurses, st.session_state.current_user)).start()
                                 else:
-                                    try: supabase.table("departments").update({"colour": edit_colour}).eq("id", old_id).execute()
+                                    try: supabase.table("departments").update({"colour": edit_colour}).eq("id", old_id).eq("owner_user_id", st.session_state.current_user).execute()
                                     except: pass
                                     
                                 dept['id'] = edit_id
                                 dept['name'] = edit_name
                                 dept['colour'] = edit_colour
                                 st.session_state.departments.sort(key=lambda x: x['name'].upper())
-                                save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments)
+                                save_data("departments", DEPARTMENTS_DATA_FILE, st.session_state.departments, st.session_state.current_user)
                                 
                                 st.session_state.editing_dept_id = None
                                 notify("Department updated successfully:", detail=f"[{edit_id}] {edit_name}")
@@ -2203,7 +2152,7 @@ def render_manage_demand():
                         st.rerun()
 
         if st.button("Save Default Demand", type="primary"):
-            save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
+            save_data("demand", DEMAND_DATA_FILE, st.session_state.demand, st.session_state.current_user)
             notify("Default demand saved:", detail="Minimum coverage requirements updated successfully")
             st.rerun()
 
@@ -2276,13 +2225,13 @@ def render_manage_demand():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Save Override", type="primary"):
-                    save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
+                    save_data("demand", DEMAND_DATA_FILE, st.session_state.demand, st.session_state.current_user)
                     notify("Override saved:", detail=f"Custom requirements for {date_str} updated")
                     st.rerun()
             with col2:
                 if st.button("Delete Override", type="secondary"):
                     del st.session_state.demand["overrides"][date_str]
-                    save_data("demand", DEMAND_DATA_FILE, st.session_state.demand)
+                    save_data("demand", DEMAND_DATA_FILE, st.session_state.demand, st.session_state.current_user)
                     notify("Override deleted:", detail=f"Custom requirements for {date_str} removed")
                     st.rerun()
         else:
@@ -2290,115 +2239,217 @@ def render_manage_demand():
 
 
 def render_dashboard():
-    st.write("Ensure all core modules are configured before generating a schedule.")
+    # Metrics calculation
+    total_staff = len(st.session_state.nurses)
+    total_shifts = len(st.session_state.shifts)
+    total_depts = len(st.session_state.departments)
+    total_skills = len(st.session_state.skills)
     
-    # Check status of each module
-    sys_shifts = len(st.session_state.shifts) > 0
-    sys_skills = len(st.session_state.skills) > 0
-    sys_depts = len(st.session_state.departments) > 0
+    # Summary Metrics Row
+    st.markdown(f"""
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+            <div class="card" style="padding: 1.5rem; text-align: center;">
+                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Total Staff</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_staff}</div>
+                <div style="font-size: 0.75rem; color: #10B981; margin-top: 0.5rem;">↑ Active Personnel</div>
+            </div>
+            <div class="card" style="padding: 1.5rem; text-align: center;">
+                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Shifts Configured</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_shifts}</div>
+                <div style="font-size: 0.75rem; color: #3B82F6; margin-top: 0.5rem;">Standard Rotations</div>
+            </div>
+            <div class="card" style="padding: 1.5rem; text-align: center;">
+                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Departments</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_depts}</div>
+                <div style="font-size: 0.75rem; color: #8B5CF6; margin-top: 0.5rem;">Healthcare Units</div>
+            </div>
+            <div class="card" style="padding: 1.5rem; text-align: center;">
+                <div style="font-size: 0.875rem; color: #64748B; margin-bottom: 0.5rem;">Skills Tracked</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #1E293B;">{total_skills}</div>
+                <div style="font-size: 0.75rem; color: #F59E0B; margin-top: 0.5rem;">Specializations</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 📋 System Setup Checklist")
+    st.write("Complete these essential configurations to enable automated scheduling.")
+    
+    # Check status of each module for the checklist
+    sys_shifts = total_shifts > 0
+    sys_skills = total_skills > 0
+    sys_depts = total_depts > 0
     sys_grades = sum(len(layer) for layer in st.session_state.grades) > 0
-    sys_staff = len(st.session_state.nurses) > 0
+    sys_staff = total_staff > 0
     sys_demand = len(st.session_state.demand.get('default', {})) > 0
     
-    # Display cards
-    c1, c2, c3 = st.columns(3)
-    def status_icon(is_ok):
-        return "✅" if is_ok else "❌"
-        
-    with c1:
-        st.info(f"{status_icon(sys_shifts)} **Shifts** defined ({len(st.session_state.shifts)})")
-        st.info(f"{status_icon(sys_skills)} **Skills** defined ({len(st.session_state.skills)})")
-    with c2:
-        st.info(f"{status_icon(sys_depts)} **Departments** defined ({len(st.session_state.departments)})")
-        st.info(f"{status_icon(sys_grades)} **Grades** defined ({sum(len(layer) for layer in st.session_state.grades)})")
-    with c3:
-        st.info(f"{status_icon(sys_staff)} **Staff Members** ({len(st.session_state.nurses)})")
-        st.info(f"{status_icon(sys_demand)} **Default Demand** Configured")
+    def get_status_tag(is_ok):
+        if is_ok:
+            return '<span style="background-color: #DEF7EC; color: #03543F; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600;">Complete</span>'
+        return '<span style="background-color: #FDE8E8; color: #9B1C1C; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600;">Pending</span>'
+
+    # Checklist Card
+    st.markdown(f"""
+        <div class="card" style="padding: 0;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid {BORDER_COLOR}; display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-weight: 600; color: #1E293B;">Configuration Status</div>
+                <div style="font-size: 0.875rem; color: #64748B;">Overview of system readiness</div>
+            </div>
+            <div style="padding: 0.5rem 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #EFF6FF; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🗓️</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Shift Types</div>
+                            <div style="font-size: 0.8rem; color: #64748B;">Define morning, afternoon, and night shift durations</div>
+                        </div>
+                    </div>
+                    {get_status_tag(sys_shifts)}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #F5F3FF; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🔧</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Skills & Specialties</div>
+                            <div style="font-size: 0.8rem; color: #64748B;">List nursing skills required for different tasks</div>
+                        </div>
+                    </div>
+                    {get_status_tag(sys_skills)}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #ECFDF5; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🏢</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Healthcare Units</div>
+                            <div style="font-size: 0.8rem; color: #64748B;">Configure wards and departments</div>
+                        </div>
+                    </div>
+                    {get_status_tag(sys_depts)}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #FFFBEB; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🏆</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Grade Hierarchy</div>
+                            <div style="font-size: 0.8rem; color: #64748B;">Define seniority levels and promotion paths</div>
+                        </div>
+                    </div>
+                    {get_status_tag(sys_grades)}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid {BORDER_COLOR}55;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #EEF2FF; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">👥</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Medical Staff</div>
+                            <div style="font-size: 0.8rem; color: #64748B;">Onboard nurses and assign their primary departments</div>
+                        </div>
+                    </div>
+                    {get_status_tag(sys_staff)}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background-color: #FDF2F8; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">📊</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: #1E293B;">Minimum Demand</div>
+                            <div style="font-size: 0.8rem; color: #64748B;">Set shift-wise staffing requirements</div>
+                        </div>
+                    </div>
+                    {get_status_tag(sys_demand)}
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
         
     all_ok = all([sys_shifts, sys_skills, sys_depts, sys_grades, sys_staff, sys_demand])
     st.session_state.dashboard_ok = all_ok
     
     st.markdown("---")
-    if all_ok:
-        st.success("🎉 All systems go! You are ready to generate schedules.")
-        if st.button("Go to Generate Schedule 🚀", type="primary"):
-            st.session_state.current_page = 'Generate Schedule'
-            st.rerun()
+    if not all_ok:
+        st.warning("⚠️ Some configurations are still pending. Please complete them to enable schedule generation.")
     else:
-        st.error("⚠️ Please complete the missing setups in the side menu before proceeding.")
+        st.success("✅ System fully configured. You can now proceed to schedule generation.")
+
 
 # ---------------------------------------------------------------------
-# Sidebar
+# Sidebar & Header bar Implementation
 # ---------------------------------------------------------------------
 
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 'Dashboard'
 
+# Sidebar Navigation logic
 with st.sidebar:
-    st.markdown('<div style="margin-top: -30px;"></div>', unsafe_allow_html=True)
-    st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>Main Page</span>", unsafe_allow_html=True)
-    st.button("📋 Dashboard", on_click=lambda: st.session_state.update(current_page='Dashboard'), use_container_width=True)
-    st.button("🚀 Generate Schedule", on_click=lambda: st.session_state.update(current_page='Generate Schedule'), use_container_width=True, type="primary")
+    st.markdown(f"""
+        <div style='text-align: center; padding: 1.5rem 0;'>
+            <div style='font-size: 2.5rem; margin-bottom: 0.5rem;'>🏥</div>
+            <div style='font-weight: 700; color: {PRIMARY_COLOR}; font-size: 1.1rem;'>Nurse Rostering</div>
+            <div style='font-size: 0.75rem; color: #64748B;'>Hospital Management</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<div style='margin-top: 1rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>Main</div>", unsafe_allow_html=True)
+    
+    if st.button("📊 Dashboard", use_container_width=True, type="secondary" if st.session_state.current_page != 'Dashboard' else "primary"):
+        st.session_state.current_page = 'Dashboard'
+        st.rerun()
+        
+    if st.button("🚀 Generate Roster", use_container_width=True, type="secondary" if st.session_state.current_page != 'Generate Schedule' else "primary"):
+        st.session_state.current_page = 'Generate Schedule'
+        st.rerun()
 
-    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-    st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>⚙️ General Settings</span>", unsafe_allow_html=True)
-    with st.expander("⚙️ General Settings", expanded=False):
-        st.button("🎨 Theme Settings", on_click=lambda: st.session_state.update(current_page='Theme'), use_container_width=True)
-        st.button("🛡️ Hard Constraints", on_click=lambda: st.session_state.update(current_page='Hard Constraints'), use_container_width=True)
-        st.button("⚖️ Soft Constraints", on_click=lambda: st.session_state.update(current_page='Soft Constraints'), use_container_width=True)
+    st.markdown("<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>Management</div>", unsafe_allow_html=True)
+    
+    # Simple list instead of expanders for a cleaner look
+    nav_items = [
+        ("🏢 Departments", "Manage Departments"),
+        ("👥 Staff Members", "Manage Staff"),
+        ("🔧 Skills List", "Manage Skills"),
+        ("🏆 Grade Levels", "Grades Hierarchy"),
+        ("🗓️ Shift Types", "Manage Shifts"),
+        ("📊 Demand Setup", "Minimum Demand"),
+    ]
+    
+    for label, page in nav_items:
+        if st.button(label, use_container_width=True, type="secondary" if st.session_state.current_page != page else "primary"):
+            st.session_state.current_page = page
+            st.rerun()
 
-    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-    st.markdown("<span style='font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;'>🔐 Admin Database</span>", unsafe_allow_html=True)
-    with st.expander("🔐 Admin Database", expanded=False):
-        st.button("🗓️ Shifts", on_click=lambda: st.session_state.update(current_page='Manage Shifts'), use_container_width=True)
-        st.button("🔧 Skills", on_click=lambda: st.session_state.update(current_page='Manage Skills'), use_container_width=True)
-        st.button("🏆 Grades", on_click=lambda: st.session_state.update(current_page='Grades Hierarchy'), use_container_width=True)
-        st.button("🏢 Departments", on_click=lambda: st.session_state.update(current_page='Manage Departments'), use_container_width=True)
-        st.button("📊 Minimum Demand", on_click=lambda: st.session_state.update(current_page='Minimum Demand'), use_container_width=True)
-        st.button("👥 Staff", on_click=lambda: st.session_state.update(current_page='Manage Staff'), use_container_width=True)
-        st.button("🏖️ Leave Types", on_click=lambda: st.session_state.update(current_page='Leave Type'), use_container_width=True)
-    # Sidebar Auto-Collapse Script (Injecting hidden components)
-    st.components.v1.html("""
-        <script>
-            let timeout;
-            
-            function collapseAll() {
-                const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
-                if (!sidebar) return;
-                
-                const expanders = sidebar.querySelectorAll('div[data-testid="stExpander"]');
-                expanders.forEach(exp => {
-                    // Look for the toggling element (usually a summary or a div with role="button")
-                    const toggle = exp.querySelector('summary') || exp.querySelector('[role="button"]');
-                    const content = exp.querySelector('div[id^="stExpanderContent"]');
-                    
-                    if (toggle && content) {
-                        // Streamlit expanders use aria-expanded on the toggle element
-                        const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
-                        // Fallback check: if content is visible
-                        const isVisible = content.offsetHeight > 0;
-                        
-                        if (isExpanded || isVisible) {
-                            toggle.click();
-                        }
-                    }
-                });
-            }
+    st.markdown("<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>Settings</div>", unsafe_allow_html=True)
+    
+    if st.button("⚖️ Soft Constraints", use_container_width=True, type="secondary" if st.session_state.current_page != 'Soft Constraints' else "primary"):
+        st.session_state.current_page = 'Soft Constraints'
+        st.rerun()
+        
+    if st.button("🛡️ Hard Constraints", use_container_width=True, type="secondary" if st.session_state.current_page != 'Hard Constraints' else "primary"):
+        st.session_state.current_page = 'Hard Constraints'
+        st.rerun()
 
-            function resetTimer() {
-                clearTimeout(timeout);
-                timeout = setTimeout(collapseAll, 5000); // 5 seconds inactivity
-            }
+    if st.button("🏖️ Leave Types", use_container_width=True, type="secondary" if st.session_state.current_page != 'Leave Type' else "primary"):
+        st.session_state.current_page = 'Leave Type'
+        st.rerun()
 
-            // Global activity listener on the parent window for better coverage
-            const target = window.parent.document;
-            ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(event => {
-                target.addEventListener(event, resetTimer, {passive: true});
-            });
+    if st.button("📜 Audit Log", use_container_width=True, type="secondary" if st.session_state.current_page != 'Audit Log' else "primary"):
+        st.session_state.current_page = 'Audit Log'
+        st.rerun()
 
-            resetTimer();
-        </script>
-    """, height=0)
+    st.markdown("<div style='margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;'>System</div>", unsafe_allow_html=True)
+
+    if st.button("Logout", use_container_width=True):
+        st.session_state.logged_in = False
+        st.rerun()
+
+# --- Top Header Bar ---
+st.markdown(f"""
+    <div class="app-header">
+        <div class="header-title">{st.session_state.current_page}</div>
+        <div class="user-info">
+            <span>Logged in as: <strong>{st.session_state.get('current_user', 'Admin')}</strong></span>
+            <div style="width: 32px; height: 32px; border-radius: 50%; background-color: {PRIMARY_COLOR}22; display: flex; align-items: center; justify-content: center; color: {PRIMARY_COLOR}; font-weight: 700;">
+                {st.session_state.get('current_user', 'A')[0].upper()}
+            </div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
             
             
 # ---------------------------------------------------------------------
@@ -2582,80 +2633,112 @@ elif st.session_state.current_page == 'Generate Schedule':
     if 'gen_selected_dept_id' not in st.session_state:
         st.session_state.gen_selected_dept_id = None
 
-    # --- 1. Department Selection (Cards) ---
-    st.subheader("🏢 Select Department")
+    # --- 1. Department Selection (Premium Cards) ---
+    st.subheader("🏢 Step 1: Select Department")
     dept_options = {d['id']: d['name'] for d in st.session_state.departments}
     if not dept_options:
         st.warning("No departments found. Please add a department in 'Manage Departments' first.")
         st.stop()
         
+    st.markdown("""
+        <style>
+            .dept-card {
+                cursor: pointer;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }
+            .dept-card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
     # Create a grid for cards
-    num_cols = 3
-    cols = st.columns(num_cols)
-    
+    cols = st.columns(3)
     for i, (d_id, d_name) in enumerate(dept_options.items()):
-        col_idx = i % num_cols
-        
-        # Count nurses for this department
+        col_idx = i % 3
         d_nurses_count = sum(1 for n in st.session_state.nurses if n.get('department_id') == d_id)
+        is_selected = st.session_state.gen_selected_dept_id == d_id
         
         with cols[col_idx]:
-            is_selected = st.session_state.gen_selected_dept_id == d_id
-            border_color = "primary" if is_selected else "secondary"
-            with st.container(border=True):
-                if is_selected:
-                    st.markdown(f"### ✨ {d_name}")
-                else:
-                    st.markdown(f"### {d_name}")
-                st.write(f"👥 {d_nurses_count} Nurses")
-                
-                # Dynamic function factory for callbacks
-                def make_set_dept(dept_id):
-                    def set_dept():
-                        st.session_state.gen_selected_dept_id = dept_id
-                        st.session_state.last_schedule = None # Reset schedule on dept change
-                    return set_dept
-                
-                btn_label = "Selected" if is_selected else "Select"
-                btn_type = "primary" if is_selected else "secondary"
-                st.button(btn_label, key=f"btn_sel_dept_{d_id}", on_click=make_set_dept(d_id), type=btn_type, use_container_width=True)
+            card_class = "card"
+            border_style = f"2px solid {PRIMARY_COLOR}" if is_selected else f"1px solid {BORDER_COLOR}"
+            bg_color = f"{PRIMARY_COLOR}08" if is_selected else "white"
+            
+            st.markdown(f"""
+                <div class="{card_class}" style="padding: 1.25rem; border: {border_style}; background-color: {bg_color}; margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                        <div style="font-weight: 700; font-size: 1.1rem; color: #1E293B;">{d_name}</div>
+                        <div style="font-size: 1.25rem;">{'📍' if is_selected else '🏢'}</div>
+                    </div>
+                    <div style="font-size: 0.875rem; color: #64748B;">
+                        <span style="display: block; margin-bottom: 0.25rem;">👥 {d_nurses_count} Personnel Assigned</span>
+                        <span style="font-size: 0.75rem; color: {PRIMARY_COLOR if is_selected else '#94A3B8'};">
+                            {('Active Selection' if is_selected else 'Click to select')}
+                        </span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Use callback to state change
+            if st.button(f"{'Selected' if is_selected else 'Select ' + d_name}", key=f"btn_sel_dept_{d_id}", use_container_width=True, type="primary" if is_selected else "secondary"):
+                st.session_state.gen_selected_dept_id = d_id
+                st.session_state.last_schedule = None
+                st.rerun()
                 
     selected_dept_id = st.session_state.gen_selected_dept_id
     if not selected_dept_id:
-        st.info("👆 Please select a department above to continue.")
+        st.info("👆 Please select a department above to proceed to the next step.")
         st.stop()
 
     selected_dept_name = dept_options.get(selected_dept_id, "Unknown")
     dept_nurses = [n for n in st.session_state.nurses if n.get('department_id') == selected_dept_id]
 
-    # --- 0. Local Date & Data Sync ---
-    roster_start = st.session_state.roster_start_date
-    roster_end = st.session_state.roster_end_date
-    planning_horizon = (roster_end - roster_start).days + 1
-    date_labels = [(roster_start + timedelta(days=d)).strftime("%a, %b %d") for d in range(planning_horizon)]
-
-    # --- 2. Schedule Setup Section (Top) ---
+    # --- 2. Schedule Setup Section (Refined) ---
+    st.markdown("---")
+    st.subheader("🛠️ Step 2: Configure Planning Period")
+    
     with st.container(border=True):
-        st.subheader(f"🛠️ Schedule Setup for {selected_dept_name}")
-        
-        st.info(f"👥 **{len(dept_nurses)}** Nurses | 📅 **{planning_horizon}** Days")
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            st.write(f"Configuring roster for **{selected_dept_name}**")
+            st.caption(f"Targeting {len(dept_nurses)} staff members assigned to this unit.")
+            
+            roster_start = st.session_state.roster_start_date
+            roster_end = st.session_state.roster_end_date
+            
+            selected_range = st.date_input(
+                "Planning Horizon",
+                value=(roster_start, roster_end),
+                min_value=date(2024, 1, 1),
+                max_value=date(2026, 12, 31),
+                help="Select the start and end dates for the new schedule.",
+                key="gen_date_picker"
+            )
+            
+            if isinstance(selected_range, tuple) and len(selected_range) == 2:
+                if selected_range[0] != roster_start or selected_range[1] != roster_end:
+                    st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
+                    st.session_state.last_schedule = None
+                    st.rerun()
+            
+            planning_horizon = (roster_end - roster_start).days + 1
+            st.markdown(f"""
+                <div style="background-color: #F1F5F9; padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; color: #475569; border-left: 4px solid {PRIMARY_COLOR};">
+                    📅 Period: <b>{roster_start.strftime('%d %b %Y')}</b> to <b>{roster_end.strftime('%d %b %Y')}</b><br>
+                    ⏱️ Total Duration: <b>{planning_horizon} Days</b>
+                </div>
+            """, unsafe_allow_html=True)
 
-        selected_range = st.date_input(
-            "Roster Period",
-            value=(roster_start, roster_end),
-            min_value=date(2024, 1, 1),
-            max_value=date(2026, 12, 31),
-            key="gen_date_picker"
-        )
-        if isinstance(selected_range, tuple) and len(selected_range) == 2:
-            if selected_range[0] != roster_start or selected_range[1] != roster_end:
-                st.session_state.roster_start_date, st.session_state.roster_end_date = selected_range
-                st.session_state.last_schedule = None # Reset to trigger auto-load/fresh gen
+        with c2:
+            st.write("Ready to generate?")
+            st.markdown("<br>", unsafe_allow_html=True)
+            gen_btn = st.button("🚀 Run Optimizer", type="primary", use_container_width=True, help="Click to start the automated scheduling process.")
+            if st.button("🔄 Clear Selection", use_container_width=True):
+                st.session_state.gen_selected_dept_id = None
+                st.session_state.last_schedule = None
                 st.rerun()
-        st.caption(f"**Selected Range:** {roster_start.strftime('%d %b')} – {roster_end.strftime('%d %b')}")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        gen_btn = st.button("🚀 Generate Optimized Schedule", type="primary", use_container_width=True)
 
     # --- 2. Scheduling Priorities Section ---
     with st.expander("📝 Scheduling Priorities & Rules", expanded=False):
@@ -2676,6 +2759,7 @@ elif st.session_state.current_page == 'Generate Schedule':
         try:
             res = supabase.table("rosters").select("*") \
                 .eq("department_id", dept_id) \
+                .eq("owner_user_id", st.session_state.current_user) \
                 .eq("start_date", start.strftime("%Y-%m-%d")) \
                 .eq("end_date", end.strftime("%Y-%m-%d")) \
                 .order("created_at", desc=True) \
@@ -2896,7 +2980,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                             "start_date": roster_start.strftime("%Y-%m-%d"),
                             "end_date": roster_end.strftime("%Y-%m-%d"),
                             "schedule_data": schedule,
-                            "department_id": selected_dept_id
+                            "department_id": selected_dept_id,
+                            "owner_user_id": st.session_state.current_user
                         }).execute()
                         notify("Schedule Generated & Saved", detail=f"Optimized roster for {selected_dept_name} is now persistent.", type="success")
                     except Exception as save_err:
@@ -3036,16 +3121,22 @@ elif st.session_state.current_page == 'Generate Schedule':
                         "start_date": roster_start.strftime("%Y-%m-%d"),
                         "end_date": roster_end.strftime("%Y-%m-%d"),
                         "schedule_data": st.session_state.last_schedule,
-                        "department_id": selected_dept_id
+                        "department_id": selected_dept_id,
+                        "owner_user_id": st.session_state.current_user
                     }).execute()
                 except Exception as e:
                     notify("Manual Change Saved Locally", detail="Cloud sync failed, change persists in session only.", type="warning")
                 
                 st.rerun()
 
-            # --- 6. Coverage Indicator ---
+            # --- 6. Coverage Indicator (Visual Row) ---
             st.markdown("---")
-            st.subheader("📊 Coverage Indicator")
+            st.markdown("""
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">📊 Coverage Status</h3>
+                    <div style="font-size: 0.85rem; color: #64748B;">Capacity vs. Requirements</div>
+                </div>
+            """, unsafe_allow_html=True)
             
             # Pre-calculate coverage
             coverage_data = []
@@ -3057,23 +3148,36 @@ elif st.session_state.current_page == 'Generate Schedule':
                 required_total = sum(req.get("Total", 1) for s, req in day_demand.items() if s != 'OFF')
                 actual_total = sum(1 for n_name in nurse_names if schedule_data[n_name][d_idx] != '-')
                 
-                status = "Fully Staffed" if actual_total >= required_total else "Understaffed"
-                color = "green" if actual_total >= required_total else ("red" if actual_total < required_total * 0.7 else "orange")
-                coverage_data.append({"Date": date_labels[d_idx], "Req": required_total, "Act": actual_total, "Status": status, "Color": color})
+                is_ok = actual_total >= required_total
+                color = "#10B981" if is_ok else ("#EF4444" if actual_total < required_total * 0.7 else "#F59E0B")
+                bg_color = f"{color}15"
+                
+                coverage_data.append({
+                    "Date": date_labels[d_idx], 
+                    "Req": required_total, 
+                    "Act": actual_total, 
+                    "Color": color,
+                    "Bg": bg_color
+                })
 
-            # Display as a horizontal status row
-            cov_cols = st.columns(min(7, planning_horizon))
+            # Display as a horizontal scrollable-like grid
+            cov_cols = st.columns(planning_horizon if planning_horizon <= 7 else 7)
             for i, data in enumerate(coverage_data):
                 with cov_cols[i % 7]:
                     st.markdown(f"""
-                        <div style="background-color: {data['Color']}; color: white; padding: 4px; border-radius: 4px; text-align: center; font-size: 0.7rem; margin-bottom: 4px;">
-                            {data['Date']}<br><b>{data['Act']}/{data['Req']}</b>
+                        <div style="background-color: {data['Bg']}; border: 1px solid {data['Color']}44; padding: 0.75rem 0.5rem; border-radius: 8px; text-align: center; margin-bottom: 1rem;">
+                            <div style="font-size: 0.65rem; color: #64748B; text-transform: uppercase; font-weight: 700; margin-bottom: 0.25rem;">{data['Date']}</div>
+                            <div style="font-size: 0.95rem; font-weight: 700; color: {data['Color']};">{data['Act']}/{data['Req']}</div>
+                            <div style="width: 100%; height: 4px; background-color: #E2E8F0; border-radius: 2px; margin-top: 0.5rem; overflow: hidden;">
+                                <div style="width: {min(100, (data['Act']/data['Req'])*100) if data['Req'] > 0 else 0}%; height: 100%; background-color: {data['Color']};"></div>
+                            </div>
                         </div>
                     """, unsafe_allow_html=True)
 
-            # --- 7. Conflict Warnings ---
+            # --- 7. Conflict Warnings (Styled Container) ---
             st.markdown("---")
-            st.subheader("⚠️ Conflict Warnings")
+            st.markdown("### ⚠️ Compliance Monitoring")
+            
             conflicts = []
             night_codes = [s['code'] for s in st.session_state.shifts if s.get('type') == 'Night']
             
@@ -3085,9 +3189,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                     if s in night_codes:
                         consecutive_nights += 1
                         if consecutive_nights > 4:
-                            conflicts.append(f"🚩 **{n_name}**: Exceeds max 4 consecutive night shifts at {date_labels[d_idx]}")
+                            conflicts.append(f"<b>{n_name}</b>: Exceeds max 4 consecutive night shifts at {date_labels[d_idx]}")
                     else:
-                        # Check Night Recovery
                         if consecutive_nights > 0:
                             needed_off = 1 if consecutive_nights == 1 else (2 if consecutive_nights <= 3 else 3)
                             off_found = 0
@@ -3095,7 +3198,7 @@ elif st.session_state.current_page == 'Generate Schedule':
                                 if shifts[next_d] == '-': off_found += 1
                                 else: break
                             if off_found < needed_off:
-                                conflicts.append(f"🚩 **{n_name}**: Insufficient recovery ({off_found}/{needed_off} days) after {consecutive_nights} nights at {date_labels[d_idx-1]}")
+                                conflicts.append(f"<b>{n_name}</b>: Insufficient recovery ({off_found}/{needed_off} days) after {consecutive_nights} nights at {date_labels[d_idx-1]}")
                         consecutive_nights = 0
                 
                 # Check Max 7 Consecutive Days
@@ -3104,28 +3207,58 @@ elif st.session_state.current_page == 'Generate Schedule':
                     if s != '-':
                         consecutive_days += 1
                         if consecutive_days > 7:
-                            conflicts.append(f"🚩 **{n_name}**: Exceeds max 7 consecutive working days at {date_labels[d_idx]}")
+                            conflicts.append(f"<b>{n_name}</b>: Exceeds max 7 consecutive working days at {date_labels[d_idx]}")
                     else:
                         consecutive_days = 0
             
             if conflicts:
-                for msg in conflicts[:10]: # Limit to 10 warnings
-                    st.warning(msg)
-                if len(conflicts) > 10:
-                    st.info(f"Showing 10 of {len(conflicts)} conflict warnings.")
+                st.markdown(f"""
+                    <div style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; padding: 1rem; border-radius: 0 8px 8px 0; margin-bottom: 2rem;">
+                        <div style="font-weight: 700; color: #92400E; margin-bottom: 0.5rem;">Soft Constraint Violations Found ({len(conflicts)})</div>
+                        <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.875rem; color: #B45309;">
+                            {' '.join([f'<li>{c}</li>' for c in conflicts[:5]])}
+                        </ul>
+                        {f'<div style="font-size: 0.75rem; margin-top: 0.5rem; color: #D97706; font-style: italic;">+ {len(conflicts)-5} more warnings hidden</div>' if len(conflicts) > 5 else ''}
+                    </div>
+                """, unsafe_allow_html=True)
             else:
-                st.success("✅ No soft constraint violations detected in this roster.")
+                st.markdown(f"""
+                    <div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 1.25rem; border-radius: 0 8px 8px 0; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
+                        <div style="font-size: 1.5rem;">✅</div>
+                        <div>
+                            <div style="font-weight: 700; color: #065F46;">Perfect Compliance</div>
+                            <div style="font-size: 0.875rem; color: #059669;">No health or fairness constraints are violated in this roster.</div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
 
-            # --- 8. Fairness Analysis ---
+            # --- 8. Fairness Analysis (Premium Table) ---
             st.markdown("---")
-            st.subheader("⚖️ Fairness Analysis")
+            st.markdown("### ⚖️ Distribution Fairness")
+            
             if st.session_state.last_stats:
                 stat_df = st.session_state.last_stats['df']
-                st.dataframe(stat_df, hide_index=True, use_container_width=True)
                 
-                # Visualization
-                st.markdown("#### Shift Distribution")
-                st.bar_chart(stat_df.set_index('Nurse')[['Total Shifts', 'Night Shifts', 'Weekend Shifts']])
+                with st.container(border=True):
+                    st.dataframe(
+                        stat_df, 
+                        hide_index=True, 
+                        use_container_width=True,
+                        column_config={
+                            "Nurse": st.column_config.TextColumn("Personnel Name", width="medium"),
+                            "Total Shifts": st.column_config.NumberColumn("Total", format="%d 🏥"),
+                            "Night Shifts": st.column_config.NumberColumn("Nights", format="%d 🌙"),
+                            "Weekend Shifts": st.column_config.NumberColumn("Weekends", format="%d 🗓️")
+                        }
+                    )
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("#### Visual Distribution Overview")
+                st.bar_chart(
+                    stat_df.set_index('Nurse')[['Total Shifts', 'Night Shifts', 'Weekend Shifts']],
+                    color=["#3B82F6", "#8B5CF6", "#F59E0B"]
+                )
+
                 
             # Excel Export
             output = io.BytesIO()
@@ -3153,7 +3286,8 @@ elif st.session_state.current_page == 'Generate Schedule':
                             "start_date": roster_start.strftime("%Y-%m-%d"),
                             "end_date": roster_end.strftime("%Y-%m-%d"),
                             "schedule_data": st.session_state.last_schedule,
-                            "department_id": selected_dept_id
+                            "department_id": selected_dept_id,
+                            "owner_user_id": st.session_state.current_user
                         }).execute()
                         notify("Saved to Cloud", detail=f"'{name}' has been securely saved to Supabase.", type="success")
                         st.rerun()
