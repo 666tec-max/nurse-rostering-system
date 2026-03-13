@@ -9,7 +9,7 @@ from model import NurseRosteringModel
 from supabase import create_client, Client
 import staff_db
 from professional_roster_component import professional_roster
-from auth_utils import render_login_page, log_audit, save_user_prefs, load_user
+from auth_utils import render_login_page, log_audit, save_user_prefs, load_user, set_current_user
 import leave_db
 
 # Removed local JSON file references; Supabase is the sole store.
@@ -157,6 +157,8 @@ if 'logged_in' not in st.session_state:
 if not st.session_state.logged_in:
     render_login_page(supabase)
     st.stop()
+# Set Postgres session variable for RLS on every page render
+set_current_user(supabase, st.session_state.current_user)
 # ────────────────────────────────────────────────────────────────────────
 
 if 'pending_notification' not in st.session_state:

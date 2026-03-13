@@ -49,6 +49,19 @@ def save_user_prefs(supabase, user_id: str, theme: str = None, soft_constraint_p
         pass
 
 
+def set_current_user(supabase, user_id: str):
+    """Set the Postgres session variable app.current_user_id via RPC.
+    
+    This enables RLS policies that use current_setting('app.current_user_id', true)
+    to correctly filter rows by owner. Must be called at the start of each
+    Streamlit page render after the user is authenticated.
+    """
+    try:
+        supabase.rpc("set_app_user", {"user_id": user_id}).execute()
+    except Exception:
+        pass  # Non-blocking; app-level .eq() filters still apply as fallback
+
+
 # ──────────────────────────────────────────────
 # Login Page
 # ──────────────────────────────────────────────
@@ -183,6 +196,7 @@ def render_login_page(supabase):
                             "weekend_fairness": profile.get("weekend_fairness", 5),
                         }
                         log_audit(supabase, user_id, "LOGIN", {"status": "success"})
+                        set_current_user(supabase, user_id)  # Set RLS session variable
                         st.rerun()
                     else:
                         st.error("Invalid User ID or Password.")
